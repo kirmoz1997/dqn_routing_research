@@ -1,0 +1,46 @@
+{
+    "seed": 42,
+    "max_steps": 9,
+  
+    "splits": {
+      "train": "data/splits/train.jsonl",
+      "val": "data/splits/val.jsonl",
+      "test": "data/splits/test.jsonl"
+    },
+  
+    "reward": {
+      "alpha": 1.0,
+      "beta": 0.5,
+      "gamma": 1.0,
+      "p_good": 0.85,
+      "p_bad": 0.30
+    },
+  
+    "encoder": {
+      "max_features": 2000,
+      "ngram_min": 1,
+      "ngram_max": 2,
+      "min_df": 2
+    },
+  
+    "dqn": {
+      "discount": 0.99,
+      "lr": 0.001,
+      "hidden_sizes": [256, 256],
+      "buffer_size": 20000,
+      "batch_size": 128,
+      "learning_starts": 500,
+      "total_steps": 30000,
+      "train_every": 1,
+      "target_update_every": 1000,
+      "epsilon_start": 1.0,
+      "epsilon_end": 0.05,
+      "epsilon_decay_steps": 20000
+    },
+  
+    "eval": {
+      "eval_every_steps": 2000,
+      "primary_metric": "mean_f1"
+    }
+  }
+  

@@ -1,0 +1,37 @@
+{
+  "dataset_path": "data/tasks_set.jsonl",
+  "test_split_path": "data/splits/test.jsonl",
+  "val_split_path": "data/splits/val.jsonl",
+  "train_split_path": "data/splits/train.jsonl",
+  "seed": 42,
+  "max_steps": 9,
+  "reward": {
+    "alpha": 1.0,
+    "beta": 0.5,
+    "gamma": 1.0,
+    "p_good": 0.85,
+    "p_bad": 0.35
+  },
+  "buckets": {
+    "A": [2, 3],
+    "B": [4, 5, 6],
+    "C": [7, 8, 9]
+  },
+  "order": [
+    "random",
+    "rule",
+    "supervised_tfidf_logreg",
+    "llm"
+  ],
+  "llm": {
+    "include": true,
+    "model": "gpt-4o-mini",
+    "base_url": "https://openai-hub.neuraldeep.tech/v1",
+    "api_key_env": "LLM_API_KEY",
+    "temperature": 0.0,
+    "max_tokens": 120,
+    "max_retries": 2,
+    "prompt_version": "v2-recall-biased",
+    "cache_path": "cache/llm_router_cache.jsonl"
+  }
+}

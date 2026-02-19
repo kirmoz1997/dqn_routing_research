@@ -1,2 +1,27 @@
 __pycache__/
 *.pyc
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS junk
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Generated artifacts (model weights, metrics, joblib)
+artifacts/
+
+# LLM response cache
+cache/
+
+# Backup files
+*.bak
+
+# Local Python version (pyenv / uv)
+.python-version

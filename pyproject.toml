@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multiagent_dqn_routing"
+version = "0.1.0"
+description = "Multi-agent set routing with DQN"
+requires-python = ">=3.10"
+
+# ── Core runtime dependencies ────────────────────────────────────────
+# Only packages that the project actually imports.
+# Bounds: >= tested working version, < next major (where relevant).
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.13",
+    "scikit-learn>=1.5,<2",
+    "joblib>=1.3",
+    "torch>=2.2",
+]
+
+[project.optional-dependencies]
+# Convenience extras for development / analysis
+dev = [
+    "matplotlib>=3.8",
+    "pandas>=2.0",
+    "tqdm>=4.60",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
