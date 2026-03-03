@@ -2,14 +2,14 @@
 
 Исследование задачи **маршрутизации пользовательского запроса** через сеть из 9 специализированных агентов. Для каждого запроса требуется выбрать **оптимальный набор агентов** (от 2 до 9), минимизируя недобор и перебор.
 
-Подробности — в [Research Plan](Research_Plan_MultiAgent_Set_Routing_v1.0.0.md).
+Подробности — в [Research Plan](Research_Plan_MultiAgent_Set_Routing_v1.0.0.md). Результаты экспериментов — в [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md).
 
 ## Структура проекта
 
 ```
 multiagent_dqn_routing/
 ├── data/
-│   ├── tasks_set.jsonl          # Основной датасет (323 записи, JSONL)
+│   ├── tasks_set.jsonl          # Основной датасет (1054 записи, JSONL)
 │   ├── tasks_set_draft.tsv      # Черновик для ручного редактирования
 │   └── splits/
 │       ├── train.jsonl           # Стратифицированный train-сплит
@@ -39,7 +39,10 @@ multiagent_dqn_routing/
 │       └── reward_set.py        # Reward model для set routing (alpha/beta/gamma)
 ├── configs/
 │   ├── baseline_protocol.json   # Конфиг official baseline snapshot
-│   └── ddqn_set_default.json    # Конфиг обучения Double DQN
+│   ├── ddqn_set_default.json    # Конфиг обучения Double DQN (базовый)
+│   ├── ddqn_set_beta1_step005.json
+│   ├── ddqn_set_beta1_step005_gamma2_nomask.json
+│   └── ddqn_set_beta1_step005_gamma2_actionmask.json  # Рекомендуемый: beta=1, gamma=2, action mask
 ├── tools/
 │   ├── tsv_to_jsonl.py          # TSV → JSONL конвертер
 │   ├── dataset_stats_set.py     # Статистика и валидация датасета
@@ -48,6 +51,7 @@ multiagent_dqn_routing/
 │   ├── baseline_snapshot.py     # Запуск и агрегация baseline snapshot
 │   └── README.md                # Документация по утилитам
 ├── Research_Plan_MultiAgent_Set_Routing_v1.0.0.md
+├── EXPERIMENT_LOG.md            # Журнал экспериментов (baseline, DDQN итерации)
 ├── pyproject.toml
 ├── requirements.txt
 └── README.md                    # ← этот файл
@@ -116,18 +120,24 @@ python -m multiagent_dqn_routing.experiments.run_llm_set --model gpt-4o-mini --b
 ### Обучение Double DQN
 
 ```bash
-# Полный запуск (с конфигом)
+# Полный запуск (рекомендуемый конфиг: action masking + beta=1, gamma=2)
+python -m multiagent_dqn_routing.experiments.train_ddqn_set \
+    --config configs/ddqn_set_beta1_step005_gamma2_actionmask.json
+
+# Базовый конфиг (без action mask)
 python -m multiagent_dqn_routing.experiments.train_ddqn_set \
     --config configs/ddqn_set_default.json
 
 # Быстрая проверка (smoke test, ~2000 шагов)
 python -m multiagent_dqn_routing.experiments.train_ddqn_set \
-    --config configs/ddqn_set_default.json --smoke_test
+    --config configs/ddqn_set_beta1_step005_gamma2_actionmask.json --smoke_test
 
 # Артефакты сохраняются в artifacts/ddqn/:
 #   model.pt, encoder.joblib, metrics_val_best.json,
 #   metrics_test.json, config_used.json
 ```
+
+**Конфиги DDQN:** `ddqn_set_default.json` — базовый; `ddqn_set_beta1_step005_gamma2_actionmask.json` — с action masking (запрет повторного выбора агента), усиленными штрафами beta/gamma и step_cost. Результаты прогонов — в [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md).
 
 ### Reward config used in baselines
 
