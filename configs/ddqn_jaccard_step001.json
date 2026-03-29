@@ -1,0 +1,15 @@
+{
+  "reward_mode": "jaccard",
+  "step_cost": 0.01,
+  "use_action_mask": true,
+  "total_steps": 50000,
+  "hidden_sizes": [256, 256],
+  "lr": 0.001,
+  "discount": 0.99,
+  "buffer_size": 100000,
+  "batch_size": 128,
+  "epsilon_start": 1.0,
+  "epsilon_end": 0.05,
+  "target_update_every": 500,
+  "_comment": "Ablation: step_cost=0.01 (low step penalty). Shorter run for sweep."
+}

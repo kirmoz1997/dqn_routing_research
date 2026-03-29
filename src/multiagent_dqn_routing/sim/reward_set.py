@@ -101,3 +101,68 @@ class RewardSetModel:
         """
         missing = len(required_set - selected_set)
         return -self.cfg.gamma * missing
+
+
+class RewardSetJaccard:
+    """Deterministic terminal Jaccard reward for set-routing episodes.
+
+    Motivation
+    ----------
+    The original ``RewardSetModel`` uses stochastic per-step rewards
+    (p_good / p_bad firing probabilities) plus a terminal gamma penalty
+    for missing agents.  In practice this creates high-variance Q-targets
+    and conflicting signals: the agent becomes afraid of missing agents
+    (large gamma) and never learns to press STOP, selecting ~9/9 agents
+    every episode.
+
+    This class replaces the stochastic scheme with a clean two-part
+    signal:
+
+    * **Per-step:** a small fixed cost ``-step_cost`` that penalises
+      every agent selection, encouraging the router to stop early.
+    * **Terminal:** the Jaccard similarity ``|S ∩ R| / |S ∪ R|``
+      between the selected set *S* and the ground-truth set *R*.
+      This directly matches the evaluation metric and provides an
+      unambiguous, deterministic reward at the end of the episode.
+
+    Formulas
+    --------
+    ``r_step  = -step_cost``
+    ``r_term  = |S ∩ R| / |S ∪ R|``  (Jaccard index)
+    ``F1      = 2·|S ∩ R| / (|S| + |R|)``  (set-level F1)
+    """
+
+    def __init__(self, step_cost: float = 0.05) -> None:
+        self.step_cost = float(step_cost)
+
+    def step_reward(
+        self,
+        action: int,
+        selected: AbstractSet[int],
+        required: AbstractSet[int],
+    ) -> float:
+        """Fixed penalty per agent-selection step (no stochasticity)."""
+        return -self.step_cost
+
+    def terminal_reward(
+        self,
+        selected: set[int],
+        required: set[int],
+    ) -> float:
+        """Jaccard index ``|S ∩ R| / |S ∪ R|`` at episode end."""
+        if not selected and not required:
+            return 1.0
+        union = len(selected | required)
+        if union == 0:
+            return 0.0
+        return len(selected & required) / union
+
+    def terminal_reward_f1(
+        self,
+        selected: set[int],
+        required: set[int],
+    ) -> float:
+        """Set-level F1: ``2·|S ∩ R| / (|S| + |R|)``."""
+        if not selected or not required:
+            return 0.0
+        return 2 * len(selected & required) / (len(selected) + len(required))

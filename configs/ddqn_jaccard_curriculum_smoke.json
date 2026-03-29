@@ -1,0 +1,19 @@
+{
+  "reward_mode": "jaccard",
+  "step_cost": 0.05,
+  "use_action_mask": true,
+  "total_steps": 6000,
+  "hidden_sizes": [256, 256],
+  "lr": 0.001,
+  "discount": 0.99,
+  "buffer_size": 100000,
+  "batch_size": 128,
+  "epsilon_start": 1.0,
+  "epsilon_end": 0.05,
+  "target_update_every": 500,
+  "curriculum": {
+    "enabled": true,
+    "phase_fractions": [0.33, 0.33, 0.34]
+  },
+  "_comment": "Smoke test for Iteration 6: Jaccard reward + Curriculum Learning. total_steps=6000 so phase switching is observable in one short run."
+}

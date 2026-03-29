@@ -6,7 +6,7 @@ import numpy as np
 
 from multiagent_dqn_routing.agents import N_AGENTS
 from multiagent_dqn_routing.rl.state_encoder import TfidfStateEncoder
-from multiagent_dqn_routing.sim.reward_set import RewardSetModel
+from multiagent_dqn_routing.sim.reward_set import RewardSetJaccard, RewardSetModel
 
 STOP_ACTION = N_AGENTS
 
@@ -23,11 +23,14 @@ class SetRoutingEnv:
         seed: int = 42,
         use_action_mask: bool = False,
         step_cost: float = 0.0,
+        reward_mode: str = "stochastic",
     ) -> None:
         if not items:
             raise ValueError("items must not be empty")
         if max_steps <= 0:
             raise ValueError("max_steps must be > 0")
+        if reward_mode not in ("stochastic", "jaccard"):
+            raise ValueError(f"reward_mode must be 'stochastic' or 'jaccard', got '{reward_mode}'")
 
         self.items = items
         self.encoder = encoder
@@ -35,13 +38,25 @@ class SetRoutingEnv:
         self.max_steps = int(max_steps)
         self.use_action_mask = bool(use_action_mask)
         self.step_cost = float(step_cost)
+        self.reward_mode = reward_mode
         self.rng = np.random.default_rng(seed)
+
+        if reward_mode == "jaccard":
+            self.reward_fn = RewardSetJaccard(step_cost=step_cost)
+        else:
+            self.reward_fn = None
 
         self.current_item: dict[str, Any] | None = None
         self.required_set: set[int] = set()
         self.selected_set: set[int] = set()
         self.step_idx = 0
         self.done = False
+
+    def set_items(self, items: list[dict[str, Any]]) -> None:
+        """Replace the active training item pool (used for curriculum)."""
+        if not items:
+            raise ValueError("items must not be empty")
+        self.items = items
 
     def reset(self) -> np.ndarray:
         idx = int(self.rng.integers(0, len(self.items)))
@@ -91,6 +106,23 @@ class SetRoutingEnv:
         action = int(action)
         reward = 0.0
 
+        if self.reward_mode == "jaccard":
+            reward = self._step_jaccard(action)
+        else:
+            reward = self._step_stochastic(action)
+
+        obs2 = self._get_obs()
+        info = {
+            "selected_set": sorted(self.selected_set),
+            "required_set": sorted(self.required_set),
+        }
+        if self.use_action_mask:
+            info["action_mask"] = self.get_action_mask()
+        return obs2, float(reward), self.done, info
+
+    def _step_stochastic(self, action: int) -> float:
+        """Original stochastic reward logic (unchanged)."""
+        reward = 0.0
         if action != STOP_ACTION:
             step_reward, _ = self.reward_model.step_reward(
                 required_set=self.required_set,
@@ -108,12 +140,26 @@ class SetRoutingEnv:
                 selected_set=self.selected_set,
             )
             self.done = True
+        return reward
 
-        obs2 = self._get_obs()
-        info = {
-            "selected_set": sorted(self.selected_set),
-            "required_set": sorted(self.required_set),
-        }
-        if self.use_action_mask:
-            info["action_mask"] = self.get_action_mask()
-        return obs2, float(reward), self.done, info
+    def _step_jaccard(self, action: int) -> float:
+        """Deterministic Jaccard reward: fixed step cost + terminal Jaccard."""
+        assert self.reward_fn is not None
+        reward = 0.0
+
+        if action != STOP_ACTION:
+            reward += self.reward_fn.step_reward(
+                action=action,
+                selected=self.selected_set,
+                required=self.required_set,
+            )
+            self.selected_set.add(action)
+
+        self.step_idx += 1
+        if action == STOP_ACTION or self.step_idx >= self.max_steps:
+            reward += self.reward_fn.terminal_reward(
+                selected=self.selected_set,
+                required=self.required_set,
+            )
+            self.done = True
+        return reward

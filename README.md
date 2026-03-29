@@ -36,13 +36,17 @@ multiagent_dqn_routing/
 │   │   ├── state_encoder.py     # TF-IDF state encoder
 │   │   └── ddqn_agent.py        # Double DQN agent
 │   └── sim/
-│       └── reward_set.py        # Reward model для set routing (alpha/beta/gamma)
+│       └── reward_set.py        # Reward models: RewardSetModel (stochastic) + RewardSetJaccard (terminal Jaccard)
 ├── configs/
 │   ├── baseline_protocol.json   # Конфиг official baseline snapshot
 │   ├── ddqn_set_default.json    # Конфиг обучения Double DQN (базовый)
 │   ├── ddqn_set_beta1_step005.json
 │   ├── ddqn_set_beta1_step005_gamma2_nomask.json
-│   └── ddqn_set_beta1_step005_gamma2_actionmask.json  # Рекомендуемый: beta=1, gamma=2, action mask
+│   ├── ddqn_set_beta1_step005_gamma2_actionmask.json  # Stochastic reward: beta=1, gamma=2, action mask
+│   ├── ddqn_jaccard_step005.json   # Jaccard reward: step_cost=0.05, 150k steps
+│   ├── ddqn_jaccard_step001.json   # Ablation: step_cost=0.01
+│   ├── ddqn_jaccard_step010.json   # Ablation: step_cost=0.10
+│   └── ddqn_jaccard_step020.json   # Ablation: step_cost=0.20
 ├── tools/
 │   ├── tsv_to_jsonl.py          # TSV → JSONL конвертер
 │   ├── dataset_stats_set.py     # Статистика и валидация датасета
@@ -120,9 +124,13 @@ python -m multiagent_dqn_routing.experiments.run_llm_set --model gpt-4o-mini --b
 ### Обучение Double DQN
 
 ```bash
-# Полный запуск (рекомендуемый конфиг: action masking + beta=1, gamma=2)
+# Stochastic reward (итерации 1–4): action masking + beta=1, gamma=2
 python -m multiagent_dqn_routing.experiments.train_ddqn_set \
     --config configs/ddqn_set_beta1_step005_gamma2_actionmask.json
+
+# Jaccard reward (итерация 5+): терминальный Jaccard + step_cost
+python -m multiagent_dqn_routing.experiments.train_ddqn_set \
+    --config configs/ddqn_jaccard_step005.json
 
 # Базовый конфиг (без action mask)
 python -m multiagent_dqn_routing.experiments.train_ddqn_set \
@@ -131,13 +139,19 @@ python -m multiagent_dqn_routing.experiments.train_ddqn_set \
 # Быстрая проверка (smoke test, ~2000 шагов)
 python -m multiagent_dqn_routing.experiments.train_ddqn_set \
     --config configs/ddqn_set_beta1_step005_gamma2_actionmask.json --smoke_test
+python -m multiagent_dqn_routing.experiments.train_ddqn_set \
+    --config configs/ddqn_jaccard_step005.json --smoke_test
 
 # Артефакты сохраняются в artifacts/ddqn/:
 #   model.pt, encoder.joblib, metrics_val_best.json,
 #   metrics_test.json, config_used.json
 ```
 
-**Конфиги DDQN:** `ddqn_set_default.json` — базовый; `ddqn_set_beta1_step005_gamma2_actionmask.json` — с action masking (запрет повторного выбора агента), усиленными штрафами beta/gamma и step_cost. Результаты прогонов — в [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md).
+**Режимы reward:**
+- **Stochastic** (`reward_mode: "stochastic"`, по умолчанию) — пошаговый стохастический reward (alpha/beta/p_good/p_bad) + терминальный штраф gamma. Конфиги: `ddqn_set_*.json`.
+- **Jaccard** (`reward_mode: "jaccard"`) — фиксированный step_cost за каждый шаг + терминальный Jaccard `|S∩R|/|S∪R|`. Конфиги: `ddqn_jaccard_*.json`. Подробнее — в [Research Plan, §6.3](Research_Plan_MultiAgent_Set_Routing_v1.0.0.md).
+
+Результаты прогонов — в [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md).
 
 ### Reward config used in baselines
 
@@ -228,7 +242,7 @@ python tools/baseline_snapshot.py --config configs/baseline_protocol.json
 Все эксперименты выводят единый набор метрик (overall + по 3 bucket-ам):
 
 **Основные:**
-- `mean_episode_reward` — средняя суммарная награда
+- `mean_episode_reward` — средняя суммарная награда (всегда вычисляется через стохастическую `RewardSetModel` для кросс-итерационной сопоставимости, даже при `reward_mode="jaccard"`)
 - `success_rate` — доля задач с полным покрытием (missing = 0)
 - `exact_match_rate` — доля задач с точным совпадением наборов
 - `mean_jaccard` — среднее Jaccard similarity

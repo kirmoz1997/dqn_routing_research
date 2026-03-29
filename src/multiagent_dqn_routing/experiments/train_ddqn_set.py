@@ -25,6 +25,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "seed": 42,
     "max_steps": 9,
     "use_action_mask": False,
+    "curriculum": {
+        "enabled": False,
+        "phase_fractions": [0.33, 0.33, 0.34],
+    },
     "data": {
         "train_path": "data/splits/train.jsonl",
         "val_path": "data/splits/val.jsonl",
@@ -148,6 +152,40 @@ def _print_key_metrics(metrics: dict[str, Any], title: str) -> None:
     print(f"avg_underselection   = {metrics['avg_underselection']:.4f}")
 
 
+def _build_curriculum_phases(
+    items: list[dict[str, Any]],
+    phase_fractions: tuple[float, float, float] = (0.33, 0.33, 0.34),
+) -> list[list[dict[str, Any]]]:
+    """Split training items into 3 curriculum phases by |R| size.
+
+    Phase 1 — bucket A: len(required_agents) in {2, 3}
+    Phase 2 — bucket A+B: len(required_agents) in {2, 3, 4, 5, 6}
+    Phase 3 — all items (full dataset)
+
+    Parameters
+    ----------
+    items:
+        Full training dataset (pre-computed text_vecs expected).
+    phase_fractions:
+        Fraction of total_steps for each phase. Must sum to 1.0.
+
+    Returns
+    -------
+    List of 3 item lists, one per phase.
+    """
+    bucket_a = [x for x in items if len(x["required_agents"]) <= 3]
+    bucket_ab = [x for x in items if len(x["required_agents"]) <= 6]
+    bucket_all = items
+
+    if len(bucket_a) == 0:
+        raise ValueError("No training items with |R| <= 3 found. "
+                         "Check your dataset split.")
+    if len(bucket_ab) == 0:
+        raise ValueError("No training items with |R| <= 6 found.")
+
+    return [bucket_a, bucket_ab, bucket_all]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train Double DQN for set-routing")
     parser.add_argument("--config", type=str, default=None, help="Path to config JSON")
@@ -176,7 +214,8 @@ def main() -> None:
     encoder.fit([x["text"] for x in train_items])
     train_items = _precompute_text_vecs(train_items, encoder)
 
-    step_cost = float(cfg["reward"].get("step_cost", 0.0))
+    reward_mode = str(cfg.get("reward_mode", "stochastic"))
+    step_cost = float(cfg.get("step_cost", cfg["reward"].get("step_cost", 0.0)))
 
     reward_cfg = RewardSetConfig(
         alpha=float(cfg["reward"]["alpha"]),
@@ -190,15 +229,22 @@ def main() -> None:
     reward_model = RewardSetModel(reward_cfg)
 
     train_cfg = cfg["train"]
-    total_steps = int(train_cfg["total_steps"])
-    learning_starts = int(train_cfg["learning_starts"])
-    batch_size = int(train_cfg["batch_size"])
-    buffer_size = int(train_cfg["buffer_size"])
-    target_update_every = int(train_cfg["target_update_every"])
-    eval_every = int(train_cfg["eval_every"])
-    epsilon_start = float(train_cfg["epsilon_start"])
-    epsilon_end = float(train_cfg["epsilon_end"])
-    hidden_sizes = tuple(int(x) for x in train_cfg["hidden_sizes"])
+    total_steps = int(cfg.get("total_steps", train_cfg["total_steps"]))
+    curriculum_cfg = cfg.get("curriculum", {})
+    use_curriculum = bool(curriculum_cfg.get("enabled", False))
+    phase_fractions = tuple(
+        float(x) for x in curriculum_cfg.get("phase_fractions", [0.33, 0.33, 0.34])
+    )
+    learning_starts = int(cfg.get("learning_starts", train_cfg["learning_starts"]))
+    batch_size = int(cfg.get("batch_size", train_cfg["batch_size"]))
+    buffer_size = int(cfg.get("buffer_size", train_cfg["buffer_size"]))
+    target_update_every = int(cfg.get("target_update_every", train_cfg["target_update_every"]))
+    eval_every = int(cfg.get("eval_every", train_cfg["eval_every"]))
+    epsilon_start = float(cfg.get("epsilon_start", train_cfg["epsilon_start"]))
+    epsilon_end = float(cfg.get("epsilon_end", train_cfg["epsilon_end"]))
+    hidden_sizes = tuple(int(x) for x in cfg.get("hidden_sizes", train_cfg["hidden_sizes"]))
+    learning_rate = float(cfg.get("lr", train_cfg["learning_rate"]))
+    discount = float(cfg.get("discount", train_cfg["discount"]))
 
     if args.smoke_test:
         total_steps = min(total_steps, 2000)
@@ -214,14 +260,15 @@ def main() -> None:
         seed=seed,
         use_action_mask=use_action_mask,
         step_cost=step_cost,
+        reward_mode=reward_mode,
     )
     replay = ReplayBuffer(capacity=buffer_size, seed=seed)
     agent = DoubleDQNAgent(
         input_dim=encoder.state_dim,
         n_actions=N_AGENTS + 1,
         hidden_sizes=hidden_sizes,
-        learning_rate=float(train_cfg["learning_rate"]),
-        discount=float(train_cfg["discount"]),
+        learning_rate=learning_rate,
+        discount=discount,
         device=device,
         seed=seed,
     )
@@ -234,11 +281,45 @@ def main() -> None:
     metrics_test_path = artifact_dir / "metrics_test.json"
     config_used_path = artifact_dir / "config_used.json"
 
-    state = env.reset().astype(np.float32, copy=False)
     best_f1 = float("-inf")
     best_metrics: dict[str, Any] | None = None
 
+    # ── Curriculum setup ────────────────────────────────────────────
+    if use_curriculum:
+        curriculum_phases = _build_curriculum_phases(train_items, phase_fractions)
+        phase_boundaries = [
+            int(total_steps * phase_fractions[0]),
+            int(total_steps * (phase_fractions[0] + phase_fractions[1])),
+        ]
+        current_phase = 0
+        env.set_items(curriculum_phases[0])
+        print(
+            f"Curriculum enabled: phase 1 starts "
+            f"(|R|≤3, n={len(curriculum_phases[0])} items)"
+        )
+
+    state = env.reset().astype(np.float32, copy=False)
+
     for step in range(total_steps):
+        # ── Curriculum phase switching ───────────────────────────────────
+        if use_curriculum:
+            new_phase = current_phase
+            if step >= phase_boundaries[1] and current_phase < 2:
+                new_phase = 2
+            elif step >= phase_boundaries[0] and current_phase < 1:
+                new_phase = 1
+            if new_phase != current_phase:
+                current_phase = new_phase
+                env.set_items(curriculum_phases[current_phase])
+                state = env.reset().astype(np.float32, copy=False)
+                phase_sizes = [len(p) for p in curriculum_phases]
+                r_labels = ["|R|≤3", "|R|≤6", "all |R|"]
+                print(
+                    f"Curriculum: phase {current_phase + 1} starts at step {step} "
+                    f"({r_labels[current_phase]}, "
+                    f"n={phase_sizes[current_phase]} items)"
+                )
+
         epsilon = _linear_epsilon(step, total_steps, epsilon_start, epsilon_end)
         action_mask = env.get_action_mask() if use_action_mask else None
         action = agent.select_action(state, epsilon=epsilon, mask=action_mask)
@@ -321,6 +402,8 @@ def main() -> None:
     config_used = copy.deepcopy(cfg)
     config_used["device"] = device
     config_used["smoke_test"] = bool(args.smoke_test)
+    config_used["reward_mode"] = reward_mode
+    config_used["step_cost"] = step_cost
     with open(config_used_path, "w", encoding="utf-8") as fh:
         json.dump(config_used, fh, ensure_ascii=False, indent=2)
 
