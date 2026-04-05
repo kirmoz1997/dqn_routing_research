@@ -143,6 +143,70 @@ data/splits/
 
 ---
 
+## generate_adaptive_dataset.py
+
+Генерация `adaptive.trajectory` для adaptive-экспериментов через OpenAI-compatible API.
+
+### Безопасная конфигурация
+
+Секретный ключ **не должен** храниться в коде или в git. Скрипт читает его из env:
+
+- `ADAPTIVE_LLM_API_KEY` — обязательно
+- `ADAPTIVE_LLM_BASE_URL` — опционально
+- `ADAPTIVE_LLM_MODEL` — опционально, по умолчанию `qwen3-32b`
+
+### Запуск
+
+```bash
+cp .env.example .env
+# заполните .env своими значениями
+source .env
+
+python tools/generate_adaptive_dataset.py
+```
+
+Можно переопределять несекретные параметры флагами:
+
+```bash
+python tools/generate_adaptive_dataset.py \
+  --base_url https://your-openai-compatible-endpoint/v1 \
+  --model qwen3-32b \
+  --limit 10
+```
+
+### Опции
+
+| Флаг | По умолчанию | Описание |
+|------|-------------|----------|
+| `--input` | `data/tasks_set.jsonl` | Входной JSONL |
+| `--output` | `data/tasks_set_adaptive_full.jsonl` | Выходной JSONL |
+| `--base_url` | `env: ADAPTIVE_LLM_BASE_URL` | Base URL OpenAI-compatible API |
+| `--model` | `env: ADAPTIVE_LLM_MODEL` или `qwen3-32b` | Имя модели |
+| `--api_key_env` | `ADAPTIVE_LLM_API_KEY` | Имя env-переменной с ключом |
+| `--limit` | `None` | Обработать только первые N записей |
+| `--dry_run` | `false` | Показать первые 2 prompt-а без API вызовов |
+
+---
+
+## split_adaptive_dataset.py
+
+Стратифицированное разбиение `data/tasks_set_adaptive_full.jsonl` на train / val / test.
+
+### Запуск
+
+```bash
+python tools/split_adaptive_dataset.py
+```
+
+### Что делает
+
+- читает adaptive JSONL;
+- стратифицирует по `|R| = len(required_agents)`;
+- пишет `data/splits_adaptive/{train,val,test}.jsonl`;
+- печатает распределение размеров наборов по сплитам.
+
+---
+
 ## baseline_snapshot.py
 
 Официальный протокол сравнения baseline-ов в одном запуске.

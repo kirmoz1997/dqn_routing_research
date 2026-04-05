@@ -11,16 +11,19 @@ multiagent_dqn_routing/
 ├── data/
 │   ├── tasks_set.jsonl          # Основной датасет (1054 записи, JSONL)
 │   ├── tasks_set_draft.tsv      # Черновик для ручного редактирования
-│   └── splits/
-│       ├── train.jsonl           # Стратифицированный train-сплит
-│       ├── val.jsonl             # Стратифицированный val-сплит
-│       └── test.jsonl            # Стратифицированный test-сплит
+│   ├── splits/
+│   │   ├── train.jsonl           # Стратифицированный train-сплит
+│   │   ├── val.jsonl             # Стратифицированный val-сплит
+│   │   └── test.jsonl            # Стратифицированный test-сплит
+│   ├── splits_adaptive/          # train/val/test для adaptive (стратификация по |R|)
+│   └── tasks_set_adaptive_full.jsonl  # полный adaptive-пул (после генерации)
 ├── src/multiagent_dqn_routing/
 │   ├── agents.py                # Описание 9 агентов (id, name, description)
 │   ├── data/
 │   │   └── dataset.py           # Загрузка JSONL-датасетов
 │   ├── envs/
-│   │   └── set_routing_env.py   # MDP-среда для set routing (без gymnasium)
+│   │   ├── set_routing_env.py   # MDP-среда для static set routing
+│   │   └── adaptive_routing_env.py  # Adaptive env: [text_vec | selected_mask | context_vec]
 │   ├── eval/
 │   │   └── evaluator_set.py     # Evaluator для set routing (метрики + buckets)
 │   ├── experiments/
@@ -43,6 +46,10 @@ multiagent_dqn_routing/
 │   ├── ddqn_set_beta1_step005.json
 │   ├── ddqn_set_beta1_step005_gamma2_nomask.json
 │   ├── ddqn_set_beta1_step005_gamma2_actionmask.json  # Stochastic reward: beta=1, gamma=2, action mask
+│   ├── ddqn_adaptive_jaccard.json  # Adaptive env + context from trajectory outputs
+│   ├── ddqn_adaptive_jaccard_smoke.json
+│   ├── ddqn_adaptive_jaccard_v2.json  # Adaptive env + extended TF-IDF corpus
+│   ├── ddqn_adaptive_jaccard_v2_smoke.json
 │   ├── ddqn_jaccard_step005.json   # Jaccard reward: step_cost=0.05, 150k steps
 │   ├── ddqn_jaccard_step001.json   # Ablation: step_cost=0.01
 │   ├── ddqn_jaccard_step010.json   # Ablation: step_cost=0.10
@@ -52,6 +59,8 @@ multiagent_dqn_routing/
 │   ├── dataset_stats_set.py     # Статистика и валидация датасета
 │   ├── fix_dataset.py           # Каноникализация (удаление difficulty, сортировка)
 │   ├── split_jsonl_set.py       # Стратифицированный split на train/val/test
+│   ├── generate_adaptive_dataset.py  # Генерация adaptive.trajectory через LLM
+│   ├── split_adaptive_dataset.py     # Стратифицированный split adaptive-датасета
 │   ├── baseline_snapshot.py     # Запуск и агрегация baseline snapshot
 │   └── README.md                # Документация по утилитам
 ├── Research_Plan_MultiAgent_Set_Routing_v1.0.0.md
@@ -100,7 +109,27 @@ python tools/dataset_stats_set.py
 
 # Стратифицированный split
 python tools/split_jsonl_set.py
+
+# Adaptive dataset split (отдельно, не затрагивает data/splits/)
+python tools/split_adaptive_dataset.py
 ```
+
+Для генерации `data/tasks_set_adaptive_full.jsonl` не храните секреты в коде:
+
+```bash
+# один раз:
+cp .env.example .env
+
+# затем заполните .env и загрузите переменные в shell
+source .env
+
+python tools/generate_adaptive_dataset.py
+```
+
+Лучший практический подход здесь:
+- секрет (`API key`) хранить только в env,
+- несекретные параметры (`base_url`, `model`) задавать через env или CLI-флаги,
+- не коммитить реальные ключи и не передавать их в командной строке.
 
 ### Запуск baseline-ов
 
@@ -121,6 +150,32 @@ python -m multiagent_dqn_routing.experiments.run_llm_set
 python -m multiagent_dqn_routing.experiments.run_llm_set --model gpt-4o-mini --base_url https://api.openai.com/v1
 ```
 
+**Random baseline на adaptive датасете** (`data/splits_adaptive/*.jsonl`, reward как в `configs/baseline_protocol.json`):
+
+```bash
+REWARD='{"alpha":1.0,"beta":0.5,"gamma":1.0,"p_good":0.85,"p_bad":0.35}'
+python -m multiagent_dqn_routing.experiments.run_random_set \
+  --split_path data/splits_adaptive/test.jsonl \
+  --dataset_path data/tasks_set_adaptive_full.jsonl \
+  --seed 42 \
+  --reward_config_json "$REWARD"
+```
+
+Итоги полного прогона (train/val/test) и метрики — в [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md) (секции *Adaptive dataset — Baseline Random* и *Baseline Rule-based*).
+
+**Rule-based baseline на adaptive датасете** (те же reward и сплиты):
+
+```bash
+REWARD='{"alpha":1.0,"beta":0.5,"gamma":1.0,"p_good":0.85,"p_bad":0.35}'
+python -m multiagent_dqn_routing.experiments.run_rule_set \
+  --split_path data/splits_adaptive/test.jsonl \
+  --dataset_path data/tasks_set_adaptive_full.jsonl \
+  --seed 42 \
+  --reward_config_json "$REWARD"
+```
+
+Полные adaptive-прогоны для `Random` и `Rule-based`, а также их сравнение по bucket-ам, зафиксированы в [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md).
+
 ### Обучение Double DQN
 
 ```bash
@@ -132,6 +187,14 @@ python -m multiagent_dqn_routing.experiments.train_ddqn_set \
 python -m multiagent_dqn_routing.experiments.train_ddqn_set \
     --config configs/ddqn_jaccard_step005.json
 
+# Adaptive env: использует data/splits_adaptive/*.jsonl и sequential context
+python -m multiagent_dqn_routing.experiments.train_ddqn_set \
+    --config configs/ddqn_adaptive_jaccard.json
+
+# Adaptive env + расширенный TF-IDF корпус
+python -m multiagent_dqn_routing.experiments.train_ddqn_set \
+    --config configs/ddqn_adaptive_jaccard_v2.json
+
 # Базовый конфиг (без action mask)
 python -m multiagent_dqn_routing.experiments.train_ddqn_set \
     --config configs/ddqn_set_default.json
@@ -141,6 +204,8 @@ python -m multiagent_dqn_routing.experiments.train_ddqn_set \
     --config configs/ddqn_set_beta1_step005_gamma2_actionmask.json --smoke_test
 python -m multiagent_dqn_routing.experiments.train_ddqn_set \
     --config configs/ddqn_jaccard_step005.json --smoke_test
+python -m multiagent_dqn_routing.experiments.train_ddqn_set \
+    --config configs/ddqn_adaptive_jaccard_v2_smoke.json --smoke_test
 
 # Артефакты сохраняются в artifacts/ddqn/:
 #   model.pt, encoder.joblib, metrics_val_best.json,
@@ -150,6 +215,11 @@ python -m multiagent_dqn_routing.experiments.train_ddqn_set \
 **Режимы reward:**
 - **Stochastic** (`reward_mode: "stochastic"`, по умолчанию) — пошаговый стохастический reward (alpha/beta/p_good/p_bad) + терминальный штраф gamma. Конфиги: `ddqn_set_*.json`.
 - **Jaccard** (`reward_mode: "jaccard"`) — фиксированный step_cost за каждый шаг + терминальный Jaccard `|S∩R|/|S∪R|`. Конфиги: `ddqn_jaccard_*.json`. Подробнее — в [Research Plan, §6.3](Research_Plan_MultiAgent_Set_Routing_v1.0.0.md).
+
+**Режимы окружения (`env_mode`):**
+- **`static`** — исходный `SetRoutingEnv`: состояние строится как `[text_vec | selected_mask | step_feature]`.
+- **`adaptive`** — `AdaptiveRoutingEnv`: состояние строится как `[text_vec | selected_mask | context_vec]`, где `context_vec` — TF-IDF по конкатенации выходов уже выбранных агентов из `adaptive.trajectory`. Для этого режима train/val/test по умолчанию читаются из `data/splits_adaptive/`, а reward принудительно переключается на Jaccard-схему из Research Plan §6.3.
+- В конфиге `ddqn_adaptive_jaccard_v2.json` encoder обучается не только на `text`, но и на всех `adaptive.trajectory[*].output` из train-сплита. Это расширяет словарь для `context_vec`, но по текущему эксперименту не устраняет коллапс в стратегию “выбрать всех”.
 
 Результаты прогонов — в [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md).
 
@@ -242,7 +312,7 @@ python tools/baseline_snapshot.py --config configs/baseline_protocol.json
 Все эксперименты выводят единый набор метрик (overall + по 3 bucket-ам):
 
 **Основные:**
-- `mean_episode_reward` — средняя суммарная награда (всегда вычисляется через стохастическую `RewardSetModel` для кросс-итерационной сопоставимости, даже при `reward_mode="jaccard"`)
+- `mean_episode_reward` — средняя суммарная награда за эпизод; в baseline/static-экспериментах это reward из `RewardSetModel`, в adaptive/Jaccard-режиме — детерминированный reward текущей среды
 - `success_rate` — доля задач с полным покрытием (missing = 0)
 - `exact_match_rate` — доля задач с точным совпадением наборов
 - `mean_jaccard` — среднее Jaccard similarity
@@ -271,3 +341,32 @@ python tools/baseline_snapshot.py --config configs/baseline_protocol.json
 - `text` — текст запроса на русском языке
 - `eval_hint` — подсказка для интерпретации результата
 - `notes` — пояснение к разметке (не используется при обучении)
+
+### Adaptive-формат
+
+Для adaptive-экспериментов используется расширенный JSONL `data/tasks_set_adaptive_full.jsonl`.
+Он сохраняет те же поля, что и базовый датасет, и добавляет `adaptive.trajectory`:
+
+```json
+{
+  "id": "gen_9_0001",
+  "required_agents": [1, 2, 5],
+  "text": "Подготовь SQL-выгрузку и краткую сводку по cohort retention...",
+  "adaptive": {
+    "trajectory": [
+      {
+        "agent_id": 1,
+        "agent_name": "SQL Agent",
+        "output": "Сформирован SQL-запрос ...",
+        "remaining_gap": "Нужен анализ retention и финальная сводка",
+        "is_last": false
+      }
+    ]
+  }
+}
+```
+
+- `adaptive.trajectory` — упорядоченная цепочка промежуточных результатов выбранных агентов
+- `output` — текст, который попадает в `context_vec` adaptive-среды
+- `remaining_gap` — какая часть задачи ещё не закрыта после данного шага
+- `is_last` — индикатор последнего шага в сгенерированной траектории

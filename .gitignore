@@ -14,6 +14,11 @@ env/
 .idea/
 .vscode/
 
+# Local secrets / env files
+.env
+.env.*
+!.env.example
+
 # Generated artifacts (model weights, metrics, joblib)
 artifacts/
 

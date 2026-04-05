@@ -1,0 +1,24 @@
+{
+  "env_mode": "adaptive",
+  "reward_mode": "jaccard",
+  "step_cost": 0.05,
+  "use_action_mask": true,
+  "total_steps": 150000,
+  "hidden_sizes": [256, 256],
+  "lr": 0.001,
+  "discount": 0.99,
+  "buffer_size": 100000,
+  "batch_size": 128,
+  "epsilon_start": 1.0,
+  "epsilon_end": 0.05,
+  "target_update_every": 500,
+  "data": {
+    "train_path": "data/splits/train.jsonl",
+    "val_path": "data/splits/val.jsonl",
+    "test_path": "data/splits/test.jsonl",
+    "adaptive_train_path": "data/splits_adaptive/train.jsonl",
+    "adaptive_val_path": "data/splits_adaptive/val.jsonl",
+    "adaptive_test_path": "data/splits_adaptive/test.jsonl"
+  },
+  "_comment": "Iteration 7: AdaptiveRoutingEnv. State = [text_vec | selected_mask | context_vec]. Context built from TF-IDF of agent outputs observed so far. RL is theoretically justified here because Supervised cannot observe intermediate results."
+}
