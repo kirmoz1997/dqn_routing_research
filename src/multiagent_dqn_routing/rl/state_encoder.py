@@ -21,14 +21,18 @@ class TfidfStateEncoder:
         self._is_fitted = False
 
     @property
-    def text_dim(self) -> int:
+    def tfidf_dim(self) -> int:
         if not self._is_fitted:
             raise RuntimeError("Encoder is not fitted")
         return int(len(self.vectorizer.get_feature_names_out()))
 
     @property
+    def text_dim(self) -> int:
+        return self.tfidf_dim
+
+    @property
     def state_dim(self) -> int:
-        return self.text_dim + N_AGENTS + 1
+        return self.tfidf_dim + N_AGENTS + 1
 
     def fit(self, texts: Iterable[str]) -> None:
         self.vectorizer.fit(list(texts))
