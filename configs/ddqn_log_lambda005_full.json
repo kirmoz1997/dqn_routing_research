@@ -1,0 +1,23 @@
+{
+  "reward_mode": "jaccard_log",
+  "lambda_eff": 0.05,
+  "step_cost": 0.0,
+  "use_action_mask": true,
+  "total_steps": 150000,
+  "hidden_sizes": [256, 256],
+  "lr": 0.0001,
+  "discount": 0.95,
+  "buffer_size": 100000,
+  "batch_size": 128,
+  "epsilon_start": 1.0,
+  "epsilon_end": 0.05,
+  "epsilon_decay_steps": 50000,
+  "target_update_every": 200,
+  "eval_every": 2000,
+  "data": {
+    "train_path": "data/splits/train.jsonl",
+    "val_path": "data/splits/val.jsonl",
+    "test_path": "data/splits/test.jsonl"
+  },
+  "_comment": "Iteration 9 ablation - lambda=0.05, full 150k run. Lower lambda vs 0.10 to improve recall (less aggressive stopping). epsilon decays to 0.05 over first 50k steps only."
+}

@@ -20,7 +20,12 @@ from multiagent_dqn_routing.eval.evaluator_set import evaluate_set_router
 from multiagent_dqn_routing.rl.ddqn_agent import DoubleDQNAgent
 from multiagent_dqn_routing.rl.replay_buffer import ReplayBuffer
 from multiagent_dqn_routing.rl.state_encoder import TfidfStateEncoder
-from multiagent_dqn_routing.sim.reward_set import RewardSetConfig, RewardSetJaccard, RewardSetModel
+from multiagent_dqn_routing.sim.reward_set import (
+    RewardSetConfig,
+    RewardSetJaccard,
+    RewardSetLogJaccard,
+    RewardSetModel,
+)
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "seed": 42,
@@ -42,6 +47,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "gamma": 1.0,
         "p_good": 0.85,
         "p_bad": 0.30,
+        "lambda_eff": 0.10,
     },
     "train": {
         "total_steps": 30000,
@@ -234,6 +240,7 @@ def _evaluate_adaptive_router(
     precisions: list[float] = []
     recalls: list[float] = []
     f1s: list[float] = []
+    required_sizes: list[int] = []
 
     for item in items:
         required_set = set(item["required_agents"])
@@ -284,6 +291,10 @@ def _evaluate_adaptive_router(
         precisions.append(precision)
         recalls.append(recall)
         f1s.append(f1)
+        required_sizes.append(len(required_set))
+
+    avg_steps = float(np.mean(steps_list)) if steps_list else 0.0
+    avg_required_size = float(np.mean(required_sizes)) if required_sizes else 0.0
 
     return {
         "mean_episode_reward": float(np.mean(episode_rewards)) if episode_rewards else 0.0,
@@ -293,7 +304,13 @@ def _evaluate_adaptive_router(
         "mean_precision": float(np.mean(precisions)) if precisions else 0.0,
         "mean_recall": float(np.mean(recalls)) if recalls else 0.0,
         "mean_f1": float(np.mean(f1s)) if f1s else 0.0,
-        "avg_steps": float(np.mean(steps_list)) if steps_list else 0.0,
+        "avg_steps": avg_steps,
+        "avg_required_size": avg_required_size,
+        "cost_ratio": (
+            float(avg_steps / avg_required_size)
+            if avg_required_size > 0.0
+            else None
+        ),
         "avg_overselection": float(np.mean(overselections)) if overselections else 0.0,
         "avg_underselection": float(np.mean(underselections)) if underselections else 0.0,
         "n_items": len(items),
@@ -312,6 +329,12 @@ def _print_key_metrics(metrics: dict[str, Any], title: str) -> None:
     print(f"mean_recall          = {metrics['mean_recall']:.4f}")
     print(f"mean_f1              = {metrics['mean_f1']:.4f}")
     print(f"avg_steps            = {metrics['avg_steps']:.4f}")
+    if "avg_required_size" in metrics:
+        print(f"avg_required_size    = {metrics['avg_required_size']:.4f}")
+    if metrics.get("cost_ratio") is None:
+        print("cost_ratio           = n/a")
+    else:
+        print(f"cost_ratio           = {metrics['cost_ratio']:.4f}")
     print(f"avg_overselection    = {metrics['avg_overselection']:.4f}")
     print(f"avg_underselection   = {metrics['avg_underselection']:.4f}")
 
@@ -435,6 +458,7 @@ def main() -> None:
 
     reward_mode = "jaccard" if env_mode == "adaptive" else str(cfg.get("reward_mode", "stochastic"))
     step_cost = float(cfg.get("step_cost", cfg["reward"].get("step_cost", 0.0)))
+    lambda_eff = float(cfg.get("lambda_eff", cfg["reward"].get("lambda_eff", 0.10)))
 
     reward_cfg = RewardSetConfig(
         alpha=float(cfg["reward"]["alpha"]),
@@ -446,7 +470,11 @@ def main() -> None:
         seed=seed,
     )
     reward_model = RewardSetModel(reward_cfg)
-    reward_fn = RewardSetJaccard(step_cost=step_cost)
+    reward_fn: RewardSetJaccard | RewardSetLogJaccard
+    if reward_mode == "jaccard_log":
+        reward_fn = RewardSetLogJaccard(lambda_eff=lambda_eff, max_steps=max_steps)
+    else:
+        reward_fn = RewardSetJaccard(step_cost=step_cost)
 
     train_cfg = cfg["train"]
     total_steps = int(cfg.get("total_steps", train_cfg["total_steps"]))
@@ -462,6 +490,7 @@ def main() -> None:
     eval_every = int(cfg.get("eval_every", train_cfg["eval_every"]))
     epsilon_start = float(cfg.get("epsilon_start", train_cfg["epsilon_start"]))
     epsilon_end = float(cfg.get("epsilon_end", train_cfg["epsilon_end"]))
+    epsilon_decay_steps = int(cfg.get("epsilon_decay_steps", total_steps))
     hidden_sizes = tuple(int(x) for x in cfg.get("hidden_sizes", train_cfg["hidden_sizes"]))
     learning_rate = float(cfg.get("lr", train_cfg["learning_rate"]))
     discount = float(cfg.get("discount", train_cfg["discount"]))
@@ -471,6 +500,9 @@ def main() -> None:
         learning_starts = min(learning_starts, 200)
         eval_every = min(eval_every, 500)
         print("Smoke test mode enabled")
+
+    if reward_mode == "jaccard_log":
+        print(f"Reward mode: jaccard_log | λ={lambda_eff} | γ={discount}")
 
     if env_mode == "adaptive":
         env = AdaptiveRoutingEnv(
@@ -492,6 +524,7 @@ def main() -> None:
             use_action_mask=use_action_mask,
             step_cost=step_cost,
             reward_mode=reward_mode,
+            lambda_eff=lambda_eff,
         )
         input_dim = encoder.state_dim
     replay = ReplayBuffer(capacity=buffer_size, seed=seed)
@@ -552,7 +585,7 @@ def main() -> None:
                     f"n={phase_sizes[current_phase]} items)"
                 )
 
-        epsilon = _linear_epsilon(step, total_steps, epsilon_start, epsilon_end)
+        epsilon = _linear_epsilon(step, epsilon_decay_steps, epsilon_start, epsilon_end)
         action_mask = env.get_action_mask() if use_action_mask else None
         action = agent.select_action(state, epsilon=epsilon, mask=action_mask)
         next_state, reward, done, _info = env.step(action)
@@ -649,6 +682,8 @@ def main() -> None:
     config_used["env_mode"] = env_mode
     config_used["reward_mode"] = reward_mode
     config_used["step_cost"] = step_cost
+    config_used["lambda_eff"] = lambda_eff
+    config_used["reward"]["lambda_eff"] = lambda_eff
     with open(config_used_path, "w", encoding="utf-8") as fh:
         json.dump(config_used, fh, ensure_ascii=False, indent=2)
 

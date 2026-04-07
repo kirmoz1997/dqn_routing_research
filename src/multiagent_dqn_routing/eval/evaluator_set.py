@@ -38,6 +38,7 @@ _ACCUM_KEYS = (
     "episode_rewards", "successes", "steps_list",
     "coverages", "overselections", "underselections",
     "exact_matches", "jaccards", "precisions", "recalls", "f1s",
+    "required_sizes",
 )
 
 
@@ -54,6 +55,8 @@ def _aggregate_metrics(accum: Dict[str, list]) -> Dict[str, Any]:
             "mean_episode_reward": 0.0,
             "success_rate": 0.0,
             "avg_steps": 0.0,
+            "avg_required_size": 0.0,
+            "cost_ratio": None,
             "avg_coverage": 0.0,
             "avg_overselection": 0.0,
             "avg_underselection": 0.0,
@@ -64,10 +67,18 @@ def _aggregate_metrics(accum: Dict[str, list]) -> Dict[str, Any]:
             "mean_f1": 0.0,
             "n_items": 0,
         }
+    avg_steps = float(np.mean(accum["steps_list"]))
+    avg_required_size = float(np.mean(accum["required_sizes"]))
     return {
         "mean_episode_reward": float(np.mean(accum["episode_rewards"])),
         "success_rate": float(np.mean(accum["successes"])),
-        "avg_steps": float(np.mean(accum["steps_list"])),
+        "avg_steps": avg_steps,
+        "avg_required_size": avg_required_size,
+        "cost_ratio": (
+            float(avg_steps / avg_required_size)
+            if avg_required_size > 0.0
+            else None
+        ),
         "avg_coverage": float(np.mean(accum["coverages"])),
         "avg_overselection": float(np.mean(accum["overselections"])),
         "avg_underselection": float(np.mean(accum["underselections"])),
@@ -93,6 +104,7 @@ def _append_item(
     precision: float,
     recall: float,
     f1: float,
+    required_size: int,
 ) -> None:
     """Push one item's metrics into *accum*."""
     accum["episode_rewards"].append(total_reward)
@@ -106,6 +118,7 @@ def _append_item(
     accum["precisions"].append(precision)
     accum["recalls"].append(recall)
     accum["f1s"].append(f1)
+    accum["required_sizes"].append(required_size)
 
 
 def evaluate_set_router(
@@ -204,6 +217,7 @@ def evaluate_set_router(
             precision=precision,
             recall=recall,
             f1=f1,
+            required_size=set_size,
         )
 
         _append_item(overall, **item_kwargs)
@@ -252,4 +266,9 @@ def print_bucket_metrics(metrics: Dict[str, Any]) -> None:
         print(f"    avg_overselection    = {bm['avg_overselection']:.4f}")
         print(f"    avg_underselection   = {bm['avg_underselection']:.4f}")
         print(f"    avg_steps            = {bm['avg_steps']:.4f}")
+        print(f"    avg_required_size    = {bm['avg_required_size']:.4f}")
+        if bm["cost_ratio"] is None:
+            print("    cost_ratio           = n/a")
+        else:
+            print(f"    cost_ratio           = {bm['cost_ratio']:.4f}")
         print(f"    mean_episode_reward  = {bm['mean_episode_reward']:.4f}")

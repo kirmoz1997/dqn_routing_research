@@ -1,0 +1,22 @@
+{
+  "reward_mode": "jaccard_log",
+  "lambda_eff": 0.10,
+  "step_cost": 0.0,
+  "use_action_mask": true,
+  "total_steps": 2000,
+  "hidden_sizes": [256, 256],
+  "lr": 0.0001,
+  "discount": 0.95,
+  "buffer_size": 100000,
+  "batch_size": 128,
+  "epsilon_start": 1.0,
+  "epsilon_end": 0.05,
+  "target_update_every": 200,
+  "eval_every": 500,
+  "data": {
+    "train_path": "data/splits/train.jsonl",
+    "val_path": "data/splits/val.jsonl",
+    "test_path": "data/splits/test.jsonl"
+  },
+  "_comment": "Smoke test for jaccard_log reward mode. 2000 steps only."
+}

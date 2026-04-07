@@ -1,0 +1,27 @@
+{
+  "reward_mode": "jaccard_log",
+  "lambda_eff": 0.05,
+  "step_cost": 0.0,
+  "use_action_mask": true,
+  "env_mode": "adaptive",
+  "total_steps": 150000,
+  "hidden_sizes": [256, 256],
+  "lr": 0.0001,
+  "discount": 0.95,
+  "buffer_size": 100000,
+  "batch_size": 128,
+  "epsilon_start": 1.0,
+  "epsilon_end": 0.05,
+  "epsilon_decay_steps": 50000,
+  "target_update_every": 200,
+  "eval_every": 2000,
+  "data": {
+    "train_path": "data/splits/train.jsonl",
+    "val_path": "data/splits/val.jsonl",
+    "test_path": "data/splits/test.jsonl",
+    "adaptive_train_path": "data/splits_adaptive/train.jsonl",
+    "adaptive_val_path": "data/splits_adaptive/val.jsonl",
+    "adaptive_test_path": "data/splits_adaptive/test.jsonl"
+  },
+  "_comment": "Iteration 10: AdaptiveRoutingEnv + log-reward λ=0.05.\nCombines the two key innovations:\n(1) log-reward that breaks select-all collapse (proven in iter 9)\n(2) adaptive state with agent output context (iter 7-8).\nepsilon decays to 0.05 over first 50k steps only — critical\nfor avoiding plateau (lesson from iter 9 full_v1 failure).\nHypothesis: log-reward + context_vec synergy should give\nhigher F1 than static log-reward (0.888) because agent can\nuse intermediate outputs to make better stopping decisions."
+}

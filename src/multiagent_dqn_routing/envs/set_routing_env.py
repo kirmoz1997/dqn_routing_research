@@ -6,7 +6,11 @@ import numpy as np
 
 from multiagent_dqn_routing.agents import N_AGENTS
 from multiagent_dqn_routing.rl.state_encoder import TfidfStateEncoder
-from multiagent_dqn_routing.sim.reward_set import RewardSetJaccard, RewardSetModel
+from multiagent_dqn_routing.sim.reward_set import (
+    RewardSetJaccard,
+    RewardSetLogJaccard,
+    RewardSetModel,
+)
 
 STOP_ACTION = N_AGENTS
 
@@ -24,13 +28,17 @@ class SetRoutingEnv:
         use_action_mask: bool = False,
         step_cost: float = 0.0,
         reward_mode: str = "stochastic",
+        lambda_eff: float = 0.10,
     ) -> None:
         if not items:
             raise ValueError("items must not be empty")
         if max_steps <= 0:
             raise ValueError("max_steps must be > 0")
-        if reward_mode not in ("stochastic", "jaccard"):
-            raise ValueError(f"reward_mode must be 'stochastic' or 'jaccard', got '{reward_mode}'")
+        if reward_mode not in ("stochastic", "jaccard", "jaccard_log"):
+            raise ValueError(
+                "reward_mode must be 'stochastic', 'jaccard', or "
+                f"'jaccard_log', got '{reward_mode}'"
+            )
 
         self.items = items
         self.encoder = encoder
@@ -38,11 +46,17 @@ class SetRoutingEnv:
         self.max_steps = int(max_steps)
         self.use_action_mask = bool(use_action_mask)
         self.step_cost = float(step_cost)
+        self.lambda_eff = float(lambda_eff)
         self.reward_mode = reward_mode
         self.rng = np.random.default_rng(seed)
 
         if reward_mode == "jaccard":
             self.reward_fn = RewardSetJaccard(step_cost=step_cost)
+        elif reward_mode == "jaccard_log":
+            self.reward_fn = RewardSetLogJaccard(
+                lambda_eff=lambda_eff,
+                max_steps=max_steps,
+            )
         else:
             self.reward_fn = None
 
@@ -106,7 +120,7 @@ class SetRoutingEnv:
         action = int(action)
         reward = 0.0
 
-        if self.reward_mode == "jaccard":
+        if self.reward_mode in ("jaccard", "jaccard_log"):
             reward = self._step_jaccard(action)
         else:
             reward = self._step_stochastic(action)
@@ -143,16 +157,24 @@ class SetRoutingEnv:
         return reward
 
     def _step_jaccard(self, action: int) -> float:
-        """Deterministic Jaccard reward: fixed step cost + terminal Jaccard."""
+        """Deterministic set reward with terminal Jaccard signal."""
         assert self.reward_fn is not None
         reward = 0.0
 
         if action != STOP_ACTION:
-            reward += self.reward_fn.step_reward(
-                action=action,
-                selected=self.selected_set,
-                required=self.required_set,
-            )
+            if self.reward_mode == "jaccard_log":
+                reward += self.reward_fn.step_reward(
+                    step_idx=self.step_idx,
+                    action=action,
+                    selected=self.selected_set,
+                    required=self.required_set,
+                )
+            else:
+                reward += self.reward_fn.step_reward(
+                    action=action,
+                    selected=self.selected_set,
+                    required=self.required_set,
+                )
             self.selected_set.add(action)
 
         self.step_idx += 1

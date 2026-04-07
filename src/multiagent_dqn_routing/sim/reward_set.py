@@ -14,6 +14,7 @@ with probability p_bad (the reward sign is still negative).
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import AbstractSet
 
 import numpy as np
@@ -166,3 +167,110 @@ class RewardSetJaccard:
         if not selected or not required:
             return 0.0
         return 2 * len(selected & required) / (len(selected) + len(required))
+
+
+class RewardSetLogJaccard:
+    """Logarithmic step penalty + terminal Jaccard reward.
+
+    Motivation
+    ----------
+    Both RewardSetModel (stochastic) and RewardSetJaccard (flat step_cost)
+    suffer from "select-all collapse": the agent selects all 9 agents
+    every episode because marginal Jaccard gain (~0.06) always exceeds
+    flat step_cost (0.05). This is a structural local optimum that cannot
+    be escaped by tuning step_cost alone.
+
+    This class implements the logarithmic penalty from Puppeteer
+    (Dang et al., NeurIPS 2025), adapted for set routing:
+
+        r_step(t) = -lambda * log(1 + t / max_steps)
+        r_terminal = Jaccard(S, R)
+
+    The TOTAL episode cost is:
+        R_episode = Jaccard(S, R) - lambda * sum(log(1 + t / max_steps))
+
+    Key property: step cost grows monotonically with t.
+    - Step 1 (lambda=0.10, max_steps=9): cost = 0.10 * log(1+1/9) ~= 0.011
+    - Step 5:                           cost = 0.10 * log(1+5/9) ~= 0.044
+    - Step 9:                           cost = 0.10 * log(1+9/9) ~= 0.069
+
+    This creates a "cheap early steps, expensive late steps" structure:
+    the agent is not penalized heavily for initial exploration but faces
+    growing costs for over-selection. The select-all strategy becomes
+    increasingly irrational as T grows.
+
+    Comparison with flat step_cost=0.05 (9 steps):
+        Flat total penalty:    0.05 * 9 = 0.450
+        Log total penalty:     lambda * sum(log(1 + t/9)) ~= 0.382
+    Absolute values are similar, but the SHAPE is different.
+
+    Parameters
+    ----------
+    lambda_eff : float
+        Efficiency weight lambda. Controls trade-off between Jaccard quality
+        and episode length. Recommended starting value: 0.10 (Puppeteer).
+    max_steps : int
+        Maximum episode length. Used to normalize step index in log formula.
+
+    Reference
+    ---------
+    Dang et al. "Multi-Agent Collaboration via Evolving Orchestration"
+    NeurIPS 2025 (Puppeteer). Adapted logarithmic cost from Section 3.2.
+    """
+
+    def __init__(self, lambda_eff: float = 0.10, max_steps: int = 9) -> None:
+        self.lambda_eff = float(lambda_eff)
+        self.max_steps = int(max_steps)
+
+    def step_reward(
+        self,
+        step_idx: int,
+        action: int,
+        selected: AbstractSet[int],
+        required: AbstractSet[int],
+    ) -> float:
+        """Logarithmic penalty for step t (1-indexed).
+
+        Parameters
+        ----------
+        step_idx : int
+            Current step index, 0-indexed (first step = 0).
+            Internally converted to 1-indexed for formula.
+        action : int
+            The agent selected (unused in reward, kept for API consistency).
+        selected : AbstractSet[int]
+            Agents selected so far (before this step).
+        required : AbstractSet[int]
+            Ground-truth required agents.
+        """
+        del action, selected, required
+        t = step_idx + 1
+        cost = self.lambda_eff * math.log(1.0 + t / self.max_steps)
+        return -cost
+
+    def terminal_reward(
+        self,
+        selected: set[int],
+        required: set[int],
+    ) -> float:
+        """Jaccard similarity at episode end (no additional penalty here).
+
+        The log penalties are accumulated per-step in step_reward().
+        Terminal reward is pure Jaccard: clean, metric-aligned signal.
+        """
+        if not selected and not required:
+            return 1.0
+        union = len(selected | required)
+        if union == 0:
+            return 0.0
+        return len(selected & required) / union
+
+    def cumulative_log_cost(self, n_steps: int) -> float:
+        """Compute total log penalty for n_steps (for analysis/logging).
+
+        Returns lambda * sum(log(1 + t / max_steps)) for t in [1, n_steps].
+        """
+        return self.lambda_eff * sum(
+            math.log(1.0 + t / self.max_steps)
+            for t in range(1, n_steps + 1)
+        )

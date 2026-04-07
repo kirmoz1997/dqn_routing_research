@@ -2,101 +2,77 @@
 
 Исследование задачи **маршрутизации пользовательского запроса** через сеть из 9 специализированных агентов. Для каждого запроса требуется выбрать **оптимальный набор агентов** (от 2 до 9), минимизируя недобор и перебор.
 
-Подробности — в [Research Plan](Research_Plan_MultiAgent_Set_Routing_v1.0.0.md). Результаты экспериментов — в [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md).
+Подробности — в [Research Plan](Research_Plan_MultiAgent_Set_Routing_v1.0.0.md). Полный журнал запусков — в [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md).
+
+## Сводная таблица результатов
+
+### Статический датасет v2 (test n=159)
+
+| Метод | F1 | Jaccard | Precision | Recall | avg_steps | cost_ratio |
+|---|---|---|---|---|---|---|
+| Random | 0.533 | 0.402 | 0.580 | 0.593 | 5.38 | — |
+| Rule-based | 0.523 | 0.379 | 0.819 | 0.406 | 2.44 | — |
+| LLM-Router | 0.854 | 0.773 | 0.928 | 0.804 | 4.46 | — |
+| TF-IDF + LogReg | 0.876 | 0.797 | 0.836 | 0.952 | 6.16 | 1.15 |
+| DDQN flat reward (iter 4) | 0.721 | 0.600 | 0.601 | 0.995 | 8.70 | 1.62 |
+| **DDQN log λ=0.05 (iter 9)** | **0.888** | **0.824** | **0.927** | **0.865** | **4.94** | **0.931** |
+
+### Адаптивный датасет (test n=131)
+
+| Метод | F1 | Jaccard | Precision | Recall | avg_steps |
+|---|---|---|---|---|---|
+| Random | 0.512 | 0.380 | — | — | 5.44 |
+| Rule-based | 0.528 | 0.388 | — | — | 2.37 |
+| TF-IDF + LogReg | 0.885 | 0.813 | 0.879 | 0.920 | 5.13 |
+| DDQN adaptive flat (iter 7) | 0.652 | 0.517 | 0.551 | 0.892 | 7.76 |
+| DDQN adaptive log λ=0.05 (iter 10) | 0.668 | 0.532 | 0.568 | 0.938 | 8.05 |
 
 ## Структура проекта
 
-```
+```text
 multiagent_dqn_routing/
-├── data/
-│   ├── tasks_set.jsonl          # Основной датасет (1054 записи, JSONL)
-│   ├── tasks_set_draft.tsv      # Черновик для ручного редактирования
-│   ├── splits/
-│   │   ├── train.jsonl           # Стратифицированный train-сплит
-│   │   ├── val.jsonl             # Стратифицированный val-сплит
-│   │   └── test.jsonl            # Стратифицированный test-сплит
-│   ├── splits_adaptive/          # train/val/test для adaptive (стратификация по |R|)
-│   └── tasks_set_adaptive_full.jsonl  # полный adaptive-пул (после генерации)
+├── configs/                     # Все конфиги baseline/DDQN/smoke; полный список ниже
+├── data/                        # Основной и adaptive датасеты + stratified splits
+├── artifacts/                   # Зафиксированные baseline/DDQN артефакты
+├── tools/                       # Скрипты подготовки данных и snapshot-протокол
 ├── src/multiagent_dqn_routing/
-│   ├── agents.py                # Описание 9 агентов (id, name, description)
-│   ├── data/
-│   │   └── dataset.py           # Загрузка JSONL-датасетов
-│   ├── envs/
-│   │   ├── set_routing_env.py   # MDP-среда для static set routing
-│   │   └── adaptive_routing_env.py  # Adaptive env: [text_vec | selected_mask | context_vec]
-│   ├── eval/
-│   │   └── evaluator_set.py     # Evaluator для set routing (метрики + buckets)
-│   ├── experiments/
-│   │   ├── train_ddqn_set.py    # Double DQN: обучение + eval + артефакты
-│   │   ├── run_random_set.py    # Baseline 1: Random set routing
-│   │   ├── run_rule_set.py      # Baseline 2: Rule-based set routing
-│   │   ├── run_supervised_set.py # Baseline 3: TF-IDF + OVR LogReg
-│   │   ├── run_llm_set.py       # Baseline 4: LLM-Router (API + prompt)
-│   │   └── snapshot_utils.py    # Общие утилиты snapshot-протокола
-│   ├── rl/
-│   │   ├── replay_buffer.py     # Uniform replay buffer
-│   │   ├── q_network.py         # MLP Q-network (PyTorch)
-│   │   ├── state_encoder.py     # TF-IDF state encoder
-│   │   └── ddqn_agent.py        # Double DQN agent
-│   └── sim/
-│       └── reward_set.py        # Reward models: RewardSetModel (stochastic) + RewardSetJaccard (terminal Jaccard)
-├── configs/
-│   ├── baseline_protocol.json   # Конфиг official baseline snapshot
-│   ├── ddqn_set_default.json    # Конфиг обучения Double DQN (базовый)
-│   ├── ddqn_set_beta1_step005.json
-│   ├── ddqn_set_beta1_step005_gamma2_nomask.json
-│   ├── ddqn_set_beta1_step005_gamma2_actionmask.json  # Stochastic reward: beta=1, gamma=2, action mask
-│   ├── ddqn_adaptive_jaccard.json  # Adaptive env + context from trajectory outputs
-│   ├── ddqn_adaptive_jaccard_smoke.json
-│   ├── ddqn_adaptive_jaccard_v2.json  # Adaptive env + extended TF-IDF corpus
-│   ├── ddqn_adaptive_jaccard_v2_smoke.json
-│   ├── ddqn_jaccard_step005.json   # Jaccard reward: step_cost=0.05, 150k steps
-│   ├── ddqn_jaccard_step001.json   # Ablation: step_cost=0.01
-│   ├── ddqn_jaccard_step010.json   # Ablation: step_cost=0.10
-│   └── ddqn_jaccard_step020.json   # Ablation: step_cost=0.20
-├── tools/
-│   ├── tsv_to_jsonl.py          # TSV → JSONL конвертер
-│   ├── dataset_stats_set.py     # Статистика и валидация датасета
-│   ├── fix_dataset.py           # Каноникализация (удаление difficulty, сортировка)
-│   ├── split_jsonl_set.py       # Стратифицированный split на train/val/test
-│   ├── generate_adaptive_dataset.py  # Генерация adaptive.trajectory через LLM
-│   ├── split_adaptive_dataset.py     # Стратифицированный split adaptive-датасета
-│   ├── baseline_snapshot.py     # Запуск и агрегация baseline snapshot
-│   └── README.md                # Документация по утилитам
+│   ├── data/                    # Загрузка JSONL-датасетов
+│   ├── envs/                    # Static и adaptive routing environments
+│   ├── eval/                    # Set-metrics, bucket evaluation, cost_ratio
+│   ├── experiments/             # Baselines, DDQN training, snapshot utils
+│   ├── rl/                      # Replay buffer, Q-network, state encoder, DDQN agent
+│   ├── sim/                     # Reward models: stochastic / jaccard / jaccard_log
+│   └── agents.py                # Описание 9 специализированных агентов
+├── EXPERIMENT_LOG.md
 ├── Research_Plan_MultiAgent_Set_Routing_v1.0.0.md
-├── EXPERIMENT_LOG.md            # Журнал экспериментов (baseline, DDQN итерации)
 ├── pyproject.toml
 ├── requirements.txt
-└── README.md                    # ← этот файл
+└── README.md
 ```
 
 ## Быстрый старт
 
 ### Установка
 
-> **Важно:** работайте в изолированном виртуальном окружении, чтобы
-> зависимости проекта не конфликтовали с системными/conda-пакетами.
+> **Важно:** работайте в изолированном виртуальном окружении, чтобы зависимости проекта не конфликтовали с системными пакетами.
 
 ```bash
-# 1. Создайте и активируйте venv (один раз)
 python -m venv .venv
 source .venv/bin/activate        # macOS / Linux
-# .venv\Scripts\activate         # Windows
+# .venv\\Scripts\\activate      # Windows
 
-# 2. Установите проект в editable-режиме со всеми зависимостями
 pip install -e '.[dev]'
 
-# ── Альтернатива: точный lock ──
-# Если нужна 100% воспроизводимая среда (CI, ревью курсовой):
+# Для lock-окружения:
 pip install -r requirements.txt
 pip install -e .
 ```
 
 Зависимости объявлены в `pyproject.toml`:
 - **core** — `numpy`, `scipy`, `scikit-learn`, `joblib`, `torch`
-- **dev** (extras) — `matplotlib`, `pandas`, `tqdm`
+- **dev** — `matplotlib`, `pandas`, `tqdm`
 
-> **Примечание по Git:** Директории `artifacts/` (обученные модели) и `cache/` (ответы LLM-роутера) генерируются скриптами и исключены из системы контроля версий через `.gitignore`. Для воспроизведения запустите соответствующие скрипты обучения/baseline.
+> **Примечание:** `artifacts/` и `cache/` генерируются скриптами. В репозитории сохранены только те артефакты, которые нужны для отчётности и воспроизводимости.
 
 ### Подготовка данных
 
@@ -107,150 +83,122 @@ python tools/tsv_to_jsonl.py
 # Валидация и статистика
 python tools/dataset_stats_set.py
 
-# Стратифицированный split
+# Стратифицированный split основного датасета
 python tools/split_jsonl_set.py
 
-# Adaptive dataset split (отдельно, не затрагивает data/splits/)
+# Стратифицированный split adaptive-датасета
 python tools/split_adaptive_dataset.py
 ```
 
 Для генерации `data/tasks_set_adaptive_full.jsonl` не храните секреты в коде:
 
 ```bash
-# один раз:
 cp .env.example .env
-
-# затем заполните .env и загрузите переменные в shell
 source .env
-
 python tools/generate_adaptive_dataset.py
 ```
 
-Лучший практический подход здесь:
-- секрет (`API key`) хранить только в env,
-- несекретные параметры (`base_url`, `model`) задавать через env или CLI-флаги,
-- не коммитить реальные ключи и не передавать их в командной строке.
+## Воспроизведение лучшего результата (DDQN λ=0.05)
+
+```bash
+# 1. Установка
+python -m venv .venv && source .venv/bin/activate
+pip install -e '.[dev]'
+
+# 2. Подготовка данных (если splits ещё не созданы)
+python tools/split_jsonl_set.py
+
+# 3. Запуск лучшей конфигурации
+python -m multiagent_dqn_routing.experiments.train_ddqn_set \
+    --config configs/ddqn_log_lambda005_full.json
+
+# 4. Ожидаемый результат на test:
+#   mean_f1 ≈ 0.888, precision ≈ 0.927, avg_steps ≈ 4.94
+```
 
 ### Запуск baseline-ов
 
 ```bash
-# Random baseline (на test-сплите)
+# Random baseline
 python -m multiagent_dqn_routing.experiments.run_random_set
 
-# Rule-based baseline (на test-сплите)
+# Rule-based baseline
 python -m multiagent_dqn_routing.experiments.run_rule_set
 
-# Supervised baseline (train/val/test сплиты, threshold sweep)
+# Supervised baseline
 python -m multiagent_dqn_routing.experiments.run_supervised_set
 
 # LLM-Router (требует API-ключ)
 export LLM_API_KEY=sk-...
 python -m multiagent_dqn_routing.experiments.run_llm_set
-# или с указанием модели / base_url:
-python -m multiagent_dqn_routing.experiments.run_llm_set --model gpt-4o-mini --base_url https://api.openai.com/v1
 ```
 
-**Random baseline на adaptive датасете** (`data/splits_adaptive/*.jsonl`, reward как в `configs/baseline_protocol.json`):
-
-```bash
-REWARD='{"alpha":1.0,"beta":0.5,"gamma":1.0,"p_good":0.85,"p_bad":0.35}'
-python -m multiagent_dqn_routing.experiments.run_random_set \
-  --split_path data/splits_adaptive/test.jsonl \
-  --dataset_path data/tasks_set_adaptive_full.jsonl \
-  --seed 42 \
-  --reward_config_json "$REWARD"
-```
-
-Итоги полного прогона (train/val/test) и метрики — в [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md) (секции *Adaptive dataset — Baseline Random* и *Baseline Rule-based*).
-
-**Rule-based baseline на adaptive датасете** (те же reward и сплиты):
-
-```bash
-REWARD='{"alpha":1.0,"beta":0.5,"gamma":1.0,"p_good":0.85,"p_bad":0.35}'
-python -m multiagent_dqn_routing.experiments.run_rule_set \
-  --split_path data/splits_adaptive/test.jsonl \
-  --dataset_path data/tasks_set_adaptive_full.jsonl \
-  --seed 42 \
-  --reward_config_json "$REWARD"
-```
-
-Полные adaptive-прогоны для `Random` и `Rule-based`, а также их сравнение по bucket-ам, зафиксированы в [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md).
+Adaptive baseline-прогоны используют `data/splits_adaptive/*.jsonl` и reward из `configs/baseline_protocol.json`; агрегированные результаты зафиксированы в [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md).
 
 ### Обучение Double DQN
 
 ```bash
-# Stochastic reward (итерации 1–4): action masking + beta=1, gamma=2
+# Лучшая конфигурация на static v2
+python -m multiagent_dqn_routing.experiments.train_ddqn_set \
+    --config configs/ddqn_log_lambda005_full.json
+
+# Исторические stochastic reward эксперименты (итерации 1–4)
 python -m multiagent_dqn_routing.experiments.train_ddqn_set \
     --config configs/ddqn_set_beta1_step005_gamma2_actionmask.json
 
-# Jaccard reward (итерация 5+): терминальный Jaccard + step_cost
+# Jaccard reward / curriculum
 python -m multiagent_dqn_routing.experiments.train_ddqn_set \
     --config configs/ddqn_jaccard_step005.json
+python -m multiagent_dqn_routing.experiments.train_ddqn_set \
+    --config configs/ddqn_jaccard_curriculum.json
 
-# Adaptive env: использует data/splits_adaptive/*.jsonl и sequential context
+# Adaptive env
 python -m multiagent_dqn_routing.experiments.train_ddqn_set \
     --config configs/ddqn_adaptive_jaccard.json
-
-# Adaptive env + расширенный TF-IDF корпус
 python -m multiagent_dqn_routing.experiments.train_ddqn_set \
     --config configs/ddqn_adaptive_jaccard_v2.json
+python -m multiagent_dqn_routing.experiments.train_ddqn_set \
+    --config configs/ddqn_adaptive_log_lambda005.json
 
-# Базовый конфиг (без action mask)
+# Smoke-check любого конфига
 python -m multiagent_dqn_routing.experiments.train_ddqn_set \
-    --config configs/ddqn_set_default.json
-
-# Быстрая проверка (smoke test, ~2000 шагов)
-python -m multiagent_dqn_routing.experiments.train_ddqn_set \
-    --config configs/ddqn_set_beta1_step005_gamma2_actionmask.json --smoke_test
-python -m multiagent_dqn_routing.experiments.train_ddqn_set \
-    --config configs/ddqn_jaccard_step005.json --smoke_test
-python -m multiagent_dqn_routing.experiments.train_ddqn_set \
-    --config configs/ddqn_adaptive_jaccard_v2_smoke.json --smoke_test
-
-# Артефакты сохраняются в artifacts/ddqn/:
-#   model.pt, encoder.joblib, metrics_val_best.json,
-#   metrics_test.json, config_used.json
+    --config configs/ddqn_log_lambda005_full.json --smoke_test
 ```
 
-**Режимы reward:**
-- **Stochastic** (`reward_mode: "stochastic"`, по умолчанию) — пошаговый стохастический reward (alpha/beta/p_good/p_bad) + терминальный штраф gamma. Конфиги: `ddqn_set_*.json`.
-- **Jaccard** (`reward_mode: "jaccard"`) — фиксированный step_cost за каждый шаг + терминальный Jaccard `|S∩R|/|S∪R|`. Конфиги: `ddqn_jaccard_*.json`. Подробнее — в [Research Plan, §6.3](Research_Plan_MultiAgent_Set_Routing_v1.0.0.md).
+Артефакты DDQN сохраняются в `artifacts/ddqn/` (`model.pt`, `encoder.joblib`, `metrics_val_best.json`, `metrics_test.json`, `config_used.json`). Исторические smoke-конфиги сохранены в `configs/` для точной воспроизводимости, но в обычной работе достаточно флага `--smoke_test`.
 
-**Режимы окружения (`env_mode`):**
-- **`static`** — исходный `SetRoutingEnv`: состояние строится как `[text_vec | selected_mask | step_feature]`.
-- **`adaptive`** — `AdaptiveRoutingEnv`: состояние строится как `[text_vec | selected_mask | context_vec]`, где `context_vec` — TF-IDF по конкатенации выходов уже выбранных агентов из `adaptive.trajectory`. Для этого режима train/val/test по умолчанию читаются из `data/splits_adaptive/`, а reward принудительно переключается на Jaccard-схему из Research Plan §6.3.
-- В конфиге `ddqn_adaptive_jaccard_v2.json` encoder обучается не только на `text`, но и на всех `adaptive.trajectory[*].output` из train-сплита. Это расширяет словарь для `context_vec`, но по текущему эксперименту не устраняет коллапс в стратегию “выбрать всех”.
+### Baseline snapshot (official)
 
-Результаты прогонов — в [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md).
+Для воспроизводимого сравнения baseline-ов перед этапом DQN используйте:
+
+```bash
+python tools/baseline_snapshot.py --config configs/baseline_protocol.json
+```
+
+Скрипт создаёт:
+- `artifacts/baselines_summary.json`
+- `artifacts/baselines_summary.md`
+- `artifacts/baseline_<name>.json`
 
 ### Reward config used in baselines
 
-Базовые set-routing скрипты (`run_random_set.py`, `run_rule_set.py`,
-`run_supervised_set.py`, `run_llm_set.py`) по умолчанию используют:
+Базовые set-routing скрипты (`run_random_set.py`, `run_rule_set.py`, `run_supervised_set.py`, `run_llm_set.py`) по умолчанию используют:
 
 - `alpha = 1.0`
 - `beta = 0.5`
 - `gamma = 1.0`
 - `p_good = 0.85`
-- `p_bad = 0.30` (согласовано с `reward_set.py`)
+- `p_bad = 0.30`
 
-Для **official snapshot** reward берётся из `configs/baseline_protocol.json`
-(поле `reward`) и передаётся baseline-скриптам через `--reward_config_json`.
-Сейчас в конфиге snapshot установлено `p_bad = 0.35`.
+Для official snapshot reward берётся из `configs/baseline_protocol.json`, где сейчас зафиксировано `p_bad = 0.35`.
 
 ### Reproducibility for supervised artifact
 
 Supervised baseline сохраняет артефакт в `artifacts/supervised_tfidf_ovr_logreg.joblib`.
 
 - В `requirements.txt` зафиксирована рабочая версия: `scikit-learn==1.6.1`.
-- Внутрь `.joblib` сохраняются метаданные: `sklearn_version`, `seed`, `split_paths`,
-  `reward_params`, `created_at_utc`.
-- При загрузке артефакта выполняется проверка совместимости по `major.minor` версии sklearn:
-  - по умолчанию — **warning**;
-  - при запуске с `--strict_artifact_load_check` — **fail-fast**.
-
-Важно: `.joblib` может быть несовместим между версиями sklearn.  
-Если меняли окружение (Python/sklearn) — пересоберите артефакт.
+- В `.joblib` сохраняются `sklearn_version`, `seed`, `split_paths`, `reward_params`, `created_at_utc`.
+- При загрузке артефакта выполняется проверка совместимости по `major.minor` версии sklearn.
 
 Рекомендуемый порядок после смены окружения:
 
@@ -260,38 +208,41 @@ pip install -e '.[dev]'
 python -m multiagent_dqn_routing.experiments.run_supervised_set --strict_artifact_load_check
 ```
 
-### Baseline snapshot (official)
+## Конфиги экспериментов
 
-Для воспроизводимого сравнения всех baseline-ов перед этапом DQN используйте протокол:
+| Конфиг | Описание | Итерация |
+|---|---|---|
+| `baseline_protocol.json` | Официальный baseline snapshot | — |
+| `ddqn_set_default.json` | Базовый DDQN со стохастическим reward | 1 |
+| `ddqn_set_beta1_step005.json` | `beta=1.0`, `step_cost=0.05` | 2 |
+| `ddqn_set_beta1_step005_gamma2_nomask.json` | `gamma=2.0`, без action masking | 3 |
+| `ddqn_set_beta1_step005_gamma2_actionmask.json` | + action masking | 4 |
+| `ddqn_jaccard_step001.json` | Ablation flat Jaccard, `step_cost=0.01` | 5 |
+| `ddqn_jaccard_step005.json` | Flat Jaccard, `step_cost=0.05` | 5 |
+| `ddqn_jaccard_step010.json` | Ablation flat Jaccard, `step_cost=0.10` | 5 |
+| `ddqn_jaccard_step020.json` | Ablation flat Jaccard, `step_cost=0.20` | 5 |
+| `ddqn_jaccard_curriculum.json` | Curriculum learning поверх Jaccard reward | 6 |
+| `ddqn_jaccard_curriculum_smoke.json` | Короткий smoke-конфиг для curriculum | 6 |
+| `ddqn_adaptive_jaccard.json` | AdaptiveRoutingEnv + Jaccard reward | 7 |
+| `ddqn_adaptive_jaccard_smoke.json` | Короткий smoke-конфиг для adaptive env | 7 |
+| `ddqn_adaptive_jaccard_v2.json` | Adaptive env + расширенный TF-IDF корпус | 8 |
+| `ddqn_adaptive_jaccard_v2_smoke.json` | Smoke-конфиг для iteration 8 | 8 |
+| `ddqn_log_lambda010_smoke.json` | Smoke-конфиг для log-reward | 9 |
+| `ddqn_log_lambda010.json` | Log-reward `λ=0.10` probe, 50k | 9 |
+| `ddqn_log_lambda010_full.json` | Log-reward `λ=0.10` full v1, plateau | 9 |
+| `ddqn_log_lambda010_full_v2.json` | Log-reward `λ=0.10` + `epsilon_decay_steps=50000` | 9 |
+| `ddqn_log_lambda005.json` | Ablation `λ=0.05`, короткий probe | 9 |
+| `ddqn_log_lambda005_full.json` | **Лучшая конфигурация: log-reward `λ=0.05`** | **9** |
+| `ddqn_log_lambda003.json` | Ablation `λ=0.03` (не запускался) | — |
+| `ddqn_log_lambda015.json` | Ablation `λ=0.15` (не запускался) | — |
+| `ddqn_adaptive_log_lambda005.json` | Adaptive + log-reward `λ=0.05` | 10 |
 
-```bash
-python tools/baseline_snapshot.py --config configs/baseline_protocol.json
-```
+## Ключевые научные выводы
 
-Скрипт создаёт артефакты:
-
-- `artifacts/baselines_summary.json` — машиночитаемый итоговый snapshot
-- `artifacts/baselines_summary.md` — человекочитаемый отчёт
-- `artifacts/baseline_<name>.json` — промежуточные результаты отдельных baseline-ов
-
-Отключить LLM baseline можно в `configs/baseline_protocol.json`:
-
-- установить `"llm": { "include": false, ... }`, или
-- оставить `include=true`, но не задавать переменную окружения `api_key_env` (тогда LLM будет помечен как skipped).
-
-Важно: в snapshot все baseline-ы принудительно получают одинаковые параметры
-из конфига (`seed`, `max_steps`, `reward`, `test_split_path`), поэтому сравнение
-между ними воспроизводимо.
-
-Официальным snapshot перед DQN считается запуск этого протокола без ручного копипаста результатов.
-
-### LLM-Router: детали
-
-- **Промпт**: recall-biased (приоритет на полноту), версия фиксирована константой `PROMPT_VERSION`.
-- **Кэш**: JSONL-файл `cache/llm_router_cache.jsonl`. Каждая запись содержит `id`, `pred`, `raw`, `model`, `prompt_version`.
-  - При загрузке кэша фильтруются только записи, совпадающие по `model` и `prompt_version` — при смене модели или версии промпта старый кэш автоматически игнорируется.
-- **Fallback**: при невалидном ответе LLM — keyword fallback (гарантирует ≥ 2 агента).
-- **Логи**: в начале печатаются `PROMPT_VERSION`, cache hits / misses; в конце — API stats (calls, hits, fallbacks).
+1. **STOP-проблема структурна, а не параметрична.** Flat `step_cost` создаёт локальный оптимум «выбрать всех»: маргинальный прирост Jaccard (`~0.06`) систематически превышает любой фиксированный штраф за шаг.
+2. **Логарифмический штраф ломает локальный оптимум.** DDQN с `λ=0.05` превзошёл TF-IDF+LogReg по test F1 (`0.888 vs 0.876`), Jaccard (`0.824 vs 0.797`) и exact_match (`0.440 vs 0.252`), выбирая при этом меньше агентов.
+3. **Epsilon schedule критичен для sparse reward.** `epsilon_decay_steps = 50000` оказался обязательным условием успеха; при `epsilon_decay_steps = total_steps` воспроизводится plateau и возврат к select-all коллапсу.
+4. **Adaptive-постановка требует более плотного state representation.** TF-IDF `context_vec` недостаточен для использования промежуточных outputs агентов; следующие кандидаты — dense embeddings и/или PPO.
 
 ## Агенты
 
