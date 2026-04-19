@@ -6,7 +6,66 @@ More detail is available in the [Research Plan](Research_Plan_MultiAgent_Set_Rou
 
 > **Dataset language note:** the dataset was originally designed and annotated in Russian. The documentation is now in English, but the source request texts and some dataset examples remain Russian by design.
 
+## System Architecture
+
+The diagram below shows the end-to-end flow for one training step. A request enters the TF-IDF state encoder; the Double DQN agent emits an action (either select an agent `0..8` or `STOP`); the environment updates its mask and computes the reward via the selected reward model.
+
+```mermaid
+flowchart LR
+    subgraph sg_data[Dataset]
+        D[(tasks_set.jsonl<br/>required_agents,<br/>text, eval_hint)]
+    end
+
+    subgraph sg_enc[State Encoder]
+        E[TfidfStateEncoder<br/>text to vector]
+    end
+
+    subgraph sg_env[Routing Environment]
+        S[State: text_vec + mask + step<br/>adaptive: + context_vec]
+        R[RewardSetModel<br/>stochastic / jaccard / jaccard_log]
+    end
+
+    subgraph sg_agent[Double DQN Agent]
+        Q1[QNetwork online]
+        Q2[QNetwork target]
+        B[ReplayBuffer]
+    end
+
+    subgraph sg_act[Action Space: 10]
+        A0[agent 0: Code]
+        A1[agent 1: SQL]
+        A2[... agents 2..8]
+        A9[STOP action]
+    end
+
+    D --> E --> S
+    S --> Q1 -->|argmax Q| sg_act
+    sg_act -->|a_t| sg_env
+    sg_env -->|r_t, s_next, done| B
+    B -->|minibatch| Q1
+    Q1 -->|target sync| Q2
+    R --> sg_env
+
+    classDef d fill:#e3f2fd,stroke:#1976d2;
+    classDef e fill:#fff3e0,stroke:#f57c00;
+    classDef env fill:#fce4ec,stroke:#c2185b;
+    classDef a fill:#e8f5e9,stroke:#388e3c;
+    classDef act fill:#f3e5f5,stroke:#7b1fa2;
+    class D d;
+    class E e;
+    class S,R env;
+    class Q1,Q2,B a;
+    class A0,A1,A2,A9 act;
+```
+
+Code entry points: dataset loading in [src/multiagent_dqn_routing/data/dataset.py](src/multiagent_dqn_routing/data/dataset.py), state encoding in [src/multiagent_dqn_routing/rl/state_encoder.py](src/multiagent_dqn_routing/rl/state_encoder.py), environment step in [src/multiagent_dqn_routing/envs/set_routing_env.py](src/multiagent_dqn_routing/envs/set_routing_env.py), reward in [src/multiagent_dqn_routing/sim/reward_set.py](src/multiagent_dqn_routing/sim/reward_set.py), agent in [src/multiagent_dqn_routing/rl/ddqn_agent.py](src/multiagent_dqn_routing/rl/ddqn_agent.py), and the training loop in [src/multiagent_dqn_routing/experiments/train_ddqn_set.py](src/multiagent_dqn_routing/experiments/train_ddqn_set.py).
+
 ## Results Summary
+
+![Baseline leaderboard](docs/figures/leaderboard.png)
+
+*Figure 1 — Leaderboard on the static test split (n=159). Left: F1/Jaccard/Precision/Recall per method; DDQN with log reward (`λ=0.05`) leads every metric except Recall, where TF-IDF+LogReg wins at the cost of selecting more agents. Right: `avg_steps` is a direct cost proxy — DDQN reaches best F1 while picking ~1.2 fewer agents than TF-IDF+LogReg.*
+
 
 ### Static dataset v2 (test n=159)
 
@@ -36,7 +95,8 @@ multiagent_dqn_routing/
 ├── configs/                     # All baseline/DDQN/smoke configs; full list below
 ├── data/                        # Main and adaptive datasets + stratified splits
 ├── artifacts/                   # Recorded baseline/DDQN artifacts
-├── tools/                       # Data-preparation scripts and snapshot protocol
+├── docs/figures/                # README figures (regenerated from artifacts)
+├── tools/                       # Data-preparation scripts, snapshot protocol, plot_figures.py
 ├── src/multiagent_dqn_routing/
 │   ├── data/                    # JSONL dataset loading
 │   ├── envs/                    # Static and adaptive routing environments
@@ -169,6 +229,16 @@ python -m multiagent_dqn_routing.experiments.train_ddqn_set \
 
 DDQN artifacts are saved to `artifacts/ddqn/` (`model.pt`, `encoder.joblib`, `metrics_val_best.json`, `metrics_test.json`, `config_used.json`). Historical smoke configs are kept in `configs/` for exact reproducibility, but for normal use the `--smoke_test` flag is sufficient.
 
+### Regenerating README Figures
+
+All four figures embedded in this README (leaderboard, dataset composition, reward mechanisms, training progression) are produced from `artifacts/*.json` and the milestones recorded in [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md). To refresh them after a new experiment run:
+
+```bash
+python tools/plot_figures.py
+```
+
+Outputs land in `docs/figures/*.png`. The script has no dependencies beyond `matplotlib` and `numpy` (already declared in `pyproject.toml` under `[dev]`).
+
 ### Baseline Snapshot (official)
 
 For a reproducible baseline comparison before the DQN stage, run:
@@ -246,6 +316,14 @@ python -m multiagent_dqn_routing.experiments.run_supervised_set --strict_artifac
 3. **The epsilon schedule is critical for sparse reward.** `epsilon_decay_steps = 50000` turned out to be necessary for success; when `epsilon_decay_steps = total_steps`, the plateau and select-all collapse reappeared.
 4. **The adaptive setting needs a denser state representation.** TF-IDF `context_vec` is not strong enough to exploit intermediate agent outputs; the next candidates are dense embeddings and/or PPO.
 
+![Reward mechanisms](docs/figures/reward_mechanisms.png)
+
+*Figure 3 — Why the reward geometry matters (findings 1–2). Left: iterations 1–4 used a stochastic reward whose variance (grey traces) swamped the signal. Middle: a flat `step_cost = 0.05` is always smaller than the marginal Jaccard gain, so the optimal policy is to keep selecting — the "select-all" collapse. Right: a log-shaped penalty `−λ·log(1+k)` eventually exceeds the marginal gain and produces a natural STOP.*
+
+![Training progression](docs/figures/training_progression.png)
+
+*Figure 4 — The path from iteration 1 to the best model (findings 2–3). Panel A plots test F1 across ten DDQN iterations, colored by reward mode; the TF-IDF+LogReg baseline (`0.876`) is dashed for reference. Panel B shows the same runs in `avg_steps`: stochastic / flat-reward runs sit at the select-all ceiling (~9), then the log-reward iteration 9 drops to ~5 and back up when the ε-schedule is wrong. Panel C illustrates why: fixing `epsilon_decay_steps = 50 000` was the decisive change — the default `= total_steps` kept exploration too high and re-triggered the collapse.*
+
 ## Agents
 
 | ID | Name | Specialization |
@@ -275,6 +353,10 @@ All experiments report a common metric set (overall + 3 buckets):
 - **A** (`|R| ∈ {2,3}`): small sets
 - **B** (`|R| ∈ {4,5,6}`): medium sets
 - **C** (`|R| ∈ {7,8,9}`): large sets
+
+![Dataset composition and per-bucket performance](docs/figures/required_set_distribution.png)
+
+*Figure 2 — Left: `|R|` is nearly uniform across 2..9 (balanced by design). Right: F1 on the static test split broken down by bucket. TF-IDF+LogReg still wins bucket C (large sets, where high recall is trivially rewarded), but DDQN log `λ=0.05` is the only method that stays above 0.88 in every bucket — which is why it wins overall F1.*
 
 ## Dataset Format
 
