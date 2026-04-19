@@ -10,53 +10,7 @@ More detail is available in the [Research Plan](Research_Plan_MultiAgent_Set_Rou
 
 The diagram below shows the end-to-end flow for one training step. A request enters the TF-IDF state encoder; the Double DQN agent emits an action (either select an agent `0..8` or `STOP`); the environment updates its mask and computes the reward via the selected reward model.
 
-```mermaid
-flowchart LR
-    subgraph sg_data[Dataset]
-        D[(tasks_set.jsonl<br/>required_agents,<br/>text, eval_hint)]
-    end
-
-    subgraph sg_enc[State Encoder]
-        E[TfidfStateEncoder<br/>text to vector]
-    end
-
-    subgraph sg_env[Routing Environment]
-        S[State: text_vec + mask + step<br/>adaptive: + context_vec]
-        R[RewardSetModel<br/>stochastic / jaccard / jaccard_log]
-    end
-
-    subgraph sg_agent[Double DQN Agent]
-        Q1[QNetwork online]
-        Q2[QNetwork target]
-        B[ReplayBuffer]
-    end
-
-    subgraph sg_act[Action Space: 10]
-        A0[agent 0: Code]
-        A1[agent 1: SQL]
-        A2[... agents 2..8]
-        A9[STOP action]
-    end
-
-    D --> E --> S
-    S --> Q1 -->|argmax Q| sg_act
-    sg_act -->|a_t| sg_env
-    sg_env -->|r_t, s_next, done| B
-    B -->|minibatch| Q1
-    Q1 -->|target sync| Q2
-    R --> sg_env
-
-    classDef d fill:#e3f2fd,stroke:#1976d2;
-    classDef e fill:#fff3e0,stroke:#f57c00;
-    classDef env fill:#fce4ec,stroke:#c2185b;
-    classDef a fill:#e8f5e9,stroke:#388e3c;
-    classDef act fill:#f3e5f5,stroke:#7b1fa2;
-    class D d;
-    class E e;
-    class S,R env;
-    class Q1,Q2,B a;
-    class A0,A1,A2,A9 act;
-```
+![Multi-Agent Set Routing — training architecture](docs/figures/ddqn_routing_architecture.svg)
 
 Code entry points: dataset loading in [src/multiagent_dqn_routing/data/dataset.py](src/multiagent_dqn_routing/data/dataset.py), state encoding in [src/multiagent_dqn_routing/rl/state_encoder.py](src/multiagent_dqn_routing/rl/state_encoder.py), environment step in [src/multiagent_dqn_routing/envs/set_routing_env.py](src/multiagent_dqn_routing/envs/set_routing_env.py), reward in [src/multiagent_dqn_routing/sim/reward_set.py](src/multiagent_dqn_routing/sim/reward_set.py), agent in [src/multiagent_dqn_routing/rl/ddqn_agent.py](src/multiagent_dqn_routing/rl/ddqn_agent.py), and the training loop in [src/multiagent_dqn_routing/experiments/train_ddqn_set.py](src/multiagent_dqn_routing/experiments/train_ddqn_set.py).
 
