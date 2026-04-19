@@ -1,60 +1,62 @@
 # Experiment Log
 
-Журнал экспериментов проекта Multi-Agent Set Routing with DQN.
+Experiment log for the Multi-Agent Set Routing with DQN project.
 
 ---
 
-## Версия датасета
+## Dataset Version
 
-### v1 (323 записи) — использована в экспериментах ниже
+> **Dataset language note:** the dataset was originally developed and annotated in Russian. All documentation has been translated into English, but the underlying request texts remain Russian in the source data files.
 
-- **Файл:** `data/tasks_set.jsonl`
+### v1 (323 records) - used in the experiments below
+
+- **File:** `data/tasks_set.jsonl`
 - **SHA-256:** `d6e8f4d0f50b950f4e3c168ddf82cb49ab5181ce02c7bcaece0034e64db6a718`
-- **Записей:** 323
-- **Сплиты:** train=227, val=47, test=49 (70/15/15, стратификация по |R|)
-- **Seed сплита:** 42
-- **Язык текстов:** русский
-- **|R| диапазон:** 2..9
+- **Records:** 323
+- **Splits:** train=227, val=47, test=49 (70/15/15, stratified by `|R|`)
+- **Split seed:** 42
+- **Text language:** Russian
+- **`|R|` range:** 2..9
 
-### v2 (1054 записи) — обновление 2026-03-01
+### v2 (1054 records) - update from 2026-03-01
 
-Датасет расширен до **1054 записей**.
+The dataset was expanded to **1054 records**.
 
-- **Сплиты:** train=736, val=158, test=159 (70/15/15, стратификация по |R|)
-- **Seed сплита:** 42
+- **Splits:** train=736, val=158, test=159 (70/15/15, stratified by `|R|`)
+- **Split seed:** 42
 
-Результаты baseline-ов (секция 1) — на v1. Секция 2 (baseline snapshot) и DDQN итерация 4 (секция 6) — на v2.
+Baseline results (section 1) use v1. Section 2 (baseline snapshot) and DDQN iteration 4 (section 6) use v2.
 
-### Adaptive full (сплиты `data/splits_adaptive/`)
+### Adaptive full (`data/splits_adaptive/` splits)
 
-Датасет с полями `adaptive.trajectory` для режима `AdaptiveRoutingEnv`. Полный сгенерированный пул — `data/tasks_set_adaptive_full.jsonl`; стратифицированные сплиты строятся `tools/split_adaptive_dataset.py`.
+Dataset with `adaptive.trajectory` fields for `AdaptiveRoutingEnv`. The full generated pool is `data/tasks_set_adaptive_full.jsonl`; stratified splits are built by `tools/split_adaptive_dataset.py`.
 
-- **Файл (полный пул):** `data/tasks_set_adaptive_full.jsonl`
+- **File (full pool):** `data/tasks_set_adaptive_full.jsonl`
 - **SHA-256:** `4fa22c63b15e1d2c71933c87ddd205c4d605a59de4791db7a0290bc7df04df15`
-- **Сплиты:** train=609, val=131, test=131 (70/15/15, стратификация по |R|)
-- **Seed сплита:** 42
+- **Splits:** train=609, val=131, test=131 (70/15/15, stratified by `|R|`)
+- **Split seed:** 42
 
 ---
 
-## Adaptive dataset — Baseline Random (2026-04-05)
+## Adaptive Dataset - Random Baseline (2026-04-05)
 
-**Скрипт:** `python -m multiagent_dqn_routing.experiments.run_random_set`
+**Script:** `python -m multiagent_dqn_routing.experiments.run_random_set`
 
-**Протокол:** тот же стохастический reward, что в `configs/baseline_protocol.json` (поле `reward`), передаётся через `--reward_config_json` (`p_bad = 0.35`).
+**Protocol:** the same stochastic reward as in `configs/baseline_protocol.json` (the `reward` field), passed via `--reward_config_json` (`p_bad = 0.35`).
 
-**Параметры запуска:** `seed=42`, `max_steps=9` (по умолчанию), `--dataset_path data/tasks_set_adaptive_full.jsonl` только для meta/SHA в JSON-snapshot.
+**Run parameters:** `seed=42`, `max_steps=9` (default), `--dataset_path data/tasks_set_adaptive_full.jsonl` only for meta / SHA in the JSON snapshot.
 
-**Артефакты (локально, каталог в `.gitignore`):** `artifacts/baseline_adaptive/random_{train,val,test}.json`
+**Artifacts (local, directory ignored by `.gitignore`):** `artifacts/baseline_adaptive/random_{train,val,test}.json`
 
 ### Train / val / test (overall)
 
-| Сплит | n | mean_f1 | mean_jaccard | exact_match | success_rate | avg_steps | avg_over | avg_under | mean_episode_reward |
+| Split | n | mean_f1 | mean_jaccard | exact_match | success_rate | avg_steps | avg_over | avg_under | mean_episode_reward |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | train | 609 | 0.5119 | 0.3758 | 0.0082 | 0.2562 | 5.4680 | 2.5813 | 1.9146 | 0.0977 |
 | val | 131 | 0.5155 | 0.3842 | 0.0000 | 0.2824 | 5.4427 | 2.5420 | 1.8779 | 0.1641 |
 | test | 131 | 0.5120 | 0.3799 | 0.0076 | 0.2977 | 5.4427 | 2.5573 | 1.8931 | 0.1565 |
 
-### Test (n=131) — по bucket-ам |R|
+### Test (n=131) - by `|R|` bucket
 
 | Bucket | n | mean_f1 | mean_jaccard | success_rate | avg_over | avg_under |
 |---|---:|---:|---:|---:|---:|---:|
@@ -62,9 +64,9 @@
 | B | 62 | 0.5485 | 0.4018 | 0.2419 | 2.3871 | 1.9677 |
 | C | 27 | 0.6668 | 0.5348 | 0.1481 | 0.5556 | 3.2593 |
 
-Границы bucket-ов совпадают с `evaluator_set.py`: A — размер требуемого множества 2–3; B — 4–6; C — 7–9.
+Bucket boundaries match `evaluator_set.py`: A - required set size 2-3; B - 4-6; C - 7-9.
 
-**Воспроизведение (все три сплита):**
+**Reproduction (all three splits):**
 
 ```bash
 REWARD='{"alpha":1.0,"beta":0.5,"gamma":1.0,"p_good":0.85,"p_bad":0.35}'
@@ -80,27 +82,27 @@ done
 
 ---
 
-## Adaptive dataset — Baseline Rule-based (2026-04-05)
+## Adaptive Dataset - Rule-based Baseline (2026-04-05)
 
-**Скрипт:** `python -m multiagent_dqn_routing.experiments.run_rule_set`
+**Script:** `python -m multiagent_dqn_routing.experiments.run_rule_set`
 
-**Протокол:** тот же стохастический reward, что в `configs/baseline_protocol.json` (поле `reward`), через `--reward_config_json` (`p_bad = 0.35`).
+**Protocol:** the same stochastic reward as in `configs/baseline_protocol.json` (the `reward` field), via `--reward_config_json` (`p_bad = 0.35`).
 
-**Логика роутера:** эвристика по ключевым маркерам в тексте запроса (`TRIGGERS` в `run_rule_set.py`); при недоборе до `min_len=2` — дозаполнение случайными уникальными агентами (фиксированный `seed+81`).
+**Router logic:** heuristic based on keyword markers in the request text (`TRIGGERS` in `run_rule_set.py`); if the result is below `min_len=2`, the router pads with random unique agents (fixed `seed+81`).
 
-**Параметры запуска:** `seed=42`, `max_steps=9`, `--dataset_path data/tasks_set_adaptive_full.jsonl` для meta в JSON-snapshot.
+**Run parameters:** `seed=42`, `max_steps=9`, `--dataset_path data/tasks_set_adaptive_full.jsonl` for meta in the JSON snapshot.
 
-**Артефакты (локально, `.gitignore`):** `artifacts/baseline_adaptive/rule_{train,val,test}.json`
+**Artifacts (local, `.gitignore`):** `artifacts/baseline_adaptive/rule_{train,val,test}.json`
 
 ### Train / val / test (overall)
 
-| Сплит | n | mean_f1 | mean_jaccard | exact_match | success_rate | avg_steps | avg_over | avg_under | mean_episode_reward |
+| Split | n | mean_f1 | mean_jaccard | exact_match | success_rate | avg_steps | avg_over | avg_under | mean_episode_reward |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | train | 609 | 0.5137 | 0.3719 | 0.0312 | 0.0361 | 2.3218 | 0.4778 | 2.9573 | −1.4745 |
 | val | 131 | 0.5473 | 0.4059 | 0.0458 | 0.0534 | 2.3053 | 0.3817 | 2.8550 | −1.2634 |
 | test | 131 | 0.5284 | 0.3881 | 0.0382 | 0.0382 | 2.3664 | 0.4427 | 2.8550 | −1.2099 |
 
-### Test (n=131) — по bucket-ам
+### Test (n=131) - by bucket
 
 | Bucket | n | mean_f1 | mean_jaccard | success_rate | avg_over | avg_under |
 |---|---:|---:|---:|---:|---:|---:|
@@ -108,9 +110,9 @@ done
 | B | 62 | 0.5597 | 0.4123 | 0.0161 | 0.3065 | 2.8226 |
 | C | 27 | 0.4955 | 0.3344 | 0.0000 | 0.0370 | 5.2593 |
 
-Границы bucket-ов: A — 2–3; B — 4–6; C — 7–9 требуемых агентов (как в `evaluator_set.py`).
+Bucket boundaries: A - 2-3; B - 4-6; C - 7-9 required agents (as in `evaluator_set.py`).
 
-**Воспроизведение (все три сплита):**
+**Reproduction (all three splits):**
 
 ```bash
 REWARD='{"alpha":1.0,"beta":0.5,"gamma":1.0,"p_good":0.85,"p_bad":0.35}'
@@ -128,11 +130,11 @@ done
 
 ## 1. Baseline Snapshot v1 (2026-02-11)
 
-**Протокол:** `tools/baseline_snapshot.py --config configs/baseline_protocol.json`
+**Protocol:** `tools/baseline_snapshot.py --config configs/baseline_protocol.json`
 
-**Reward-параметры (baseline snapshot):**
+**Reward parameters (baseline snapshot):**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | alpha | 1.0 |
 | beta | 0.5 |
@@ -142,32 +144,32 @@ done
 
 ### Overall (test, n=49)
 
-| Метод | mean_f1 | mean_jaccard | exact_match | success_rate | precision | recall | avg_steps | avg_over | avg_under | reward |
+| Method | mean_f1 | mean_jaccard | exact_match | success_rate | precision | recall | avg_steps | avg_over | avg_under | reward |
 |---|---|---|---|---|---|---|---|---|---|---|
 | Random | 0.517 | 0.384 | 0.000 | 0.286 | 0.521 | 0.611 | 5.71 | 2.71 | 1.86 | 0.10 |
 | Rule-based | 0.483 | 0.342 | 0.020 | 0.020 | 0.765 | 0.368 | 2.20 | 0.47 | 3.12 | −1.62 |
 | Supervised (TF-IDF+LogReg) | **0.880** | **0.802** | **0.286** | **0.898** | 0.826 | **0.967** | 5.69 | 0.96 | **0.12** | **3.80** |
 | LLM-Router | *skipped* | — | — | — | — | — | — | — | — | — |
 
-### Bucket A (|R| ∈ {2, 3})
+### Bucket A (`|R| ∈ {2, 3}`)
 
-| Метод | mean_f1 | mean_jaccard | avg_over | avg_under |
+| Method | mean_f1 | mean_jaccard | avg_over | avg_under |
 |---|---|---|---|---|
 | Random | 0.297 | 0.190 | 4.14 | 1.29 |
 | Rule-based | 0.493 | 0.375 | 0.86 | 1.43 |
 | Supervised | **0.820** | **0.715** | 0.93 | **0.14** |
 
-### Bucket B (|R| ∈ {4, 5, 6})
+### Bucket B (`|R| ∈ {4, 5, 6}`)
 
-| Метод | mean_f1 | mean_jaccard | avg_over | avg_under |
+| Method | mean_f1 | mean_jaccard | avg_over | avg_under |
 |---|---|---|---|---|
 | Random | 0.560 | 0.410 | 2.54 | 1.96 |
 | Rule-based | 0.464 | 0.319 | 0.42 | 3.38 |
 | Supervised | **0.884** | **0.803** | 1.12 | **0.15** |
 
-### Bucket C (|R| ∈ {7, 8, 9})
+### Bucket C (`|R| ∈ {7, 8, 9}`)
 
-| Метод | mean_f1 | mean_jaccard | avg_over | avg_under |
+| Method | mean_f1 | mean_jaccard | avg_over | avg_under |
 |---|---|---|---|---|
 | Random | 0.732 | 0.608 | 1.00 | 2.44 |
 | Rule-based | 0.521 | 0.356 | 0.00 | 5.00 |
@@ -177,13 +179,13 @@ done
 
 ## 2. Baseline Snapshot v2 (2026-03-01)
 
-**Протокол:** `tools/baseline_snapshot.py --config configs/baseline_protocol.json`
+**Protocol:** `tools/baseline_snapshot.py --config configs/baseline_protocol.json`
 
-**Датасет:** v2 (test n=159)
+**Dataset:** v2 (test n=159)
 
-**Reward-параметры (baseline snapshot):**
+**Reward parameters (baseline snapshot):**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | alpha | 1.0 |
 | beta | 0.5 |
@@ -193,34 +195,34 @@ done
 
 ### Overall (test, n=159)
 
-| Метод | mean_f1 | mean_jaccard | exact_match | success_rate | precision | recall | avg_steps | avg_over | avg_under | reward |
+| Method | mean_f1 | mean_jaccard | exact_match | success_rate | precision | recall | avg_steps | avg_over | avg_under | reward |
 |---|---|---|---|---|---|---|---|---|---|---|
 | Random | 0.533 | 0.402 | 0.031 | 0.251 | 0.580 | 0.593 | 5.38 | 2.21 | 2.14 | 0.20 |
 | Rule-based | 0.523 | 0.379 | 0.025 | 0.025 | 0.819 | 0.406 | 2.44 | 0.38 | 3.25 | −1.58 |
 | Supervised (TF-IDF+LogReg) | **0.876** | **0.797** | **0.252** | **0.836** | **0.836** | **0.952** | **6.16** | **1.04** | **0.189** | **4.03** |
 | LLM-Router | 0.854 | 0.773 | 0.333 | 0.352 | 0.928 | 0.804 | 4.46 | 0.26 | 1.11 | 2.43 |
 
-### Bucket A (|R| ∈ {2, 3}, n=42)
+### Bucket A (`|R| ∈ {2, 3}`, n=42)
 
-| Метод | mean_f1 | mean_jaccard | avg_over | avg_under |
+| Method | mean_f1 | mean_jaccard | avg_over | avg_under |
 |---|---|---|---|---|
 | Random | 0.359 | 0.245 | 3.52 | 1.07 |
 | Rule-based | 0.503 | 0.383 | 0.90 | 1.36 |
 | Supervised | **0.824** | **0.730** | **0.95** | **0.14** |
 | LLM-Router | 0.863 | 0.810 | 0.29 | 0.38 |
 
-### Bucket B (|R| ∈ {4, 5, 6}, n=66)
+### Bucket B (`|R| ∈ {4, 5, 6}`, n=66)
 
-| Метод | mean_f1 | mean_jaccard | avg_over | avg_under |
+| Method | mean_f1 | mean_jaccard | avg_over | avg_under |
 |---|---|---|---|---|
 | Random | 0.527 | 0.377 | 2.71 | 2.03 |
 | Rule-based | 0.540 | 0.391 | 0.32 | 3.00 |
 | Supervised | **0.854** | **0.756** | **1.33** | **0.30** |
 | LLM-Router | 0.850 | 0.767 | 0.36 | 0.95 |
 
-### Bucket C (|R| ∈ {7, 8, 9}, n=51)
+### Bucket C (`|R| ∈ {7, 8, 9}`, n=51)
 
-| Метод | mean_f1 | mean_jaccard | avg_over | avg_under |
+| Method | mean_f1 | mean_jaccard | avg_over | avg_under |
 |---|---|---|---|---|
 | Random | 0.682 | 0.563 | 0.49 | 3.18 |
 | Rule-based | 0.517 | 0.359 | 0.04 | 5.14 |
@@ -229,26 +231,26 @@ done
 
 ---
 
-## 3. DDQN — Итерация 1 (конфиг `ddqn_set_default.json`)
+## 3. DDQN - Iteration 1 (config `ddqn_set_default.json`)
 
-**Дата:** 2026-02-12
+**Date:** 2026-02-12
 
-**Датасет:** v1, `data/tasks_set.jsonl` (323 записи; test n=49)
+**Dataset:** v1, `data/tasks_set.jsonl` (323 records; test n=49)
 
-**Научная гипотеза:**
-Мы проверяем гипотезу, что Double DQN может обучиться выбирать оптимальный набор агентов из 9, используя TF-IDF представление текста и бинарную маску выбранных агентов как состояние.
+**Scientific hypothesis:**  
+We test whether Double DQN can learn to select the optimal set of 9 agents using a TF-IDF representation of the text and a binary mask of selected agents as the state.
 
-**Изменения относительно предыдущей итерации:**
-- Первый RL-запуск вместо one-shot baseline-ов.
-- Сохранена исходная стохастическая reward-схема без `step_cost`.
-- Повторные выборы ещё не маскируются.
+**Changes relative to the previous iteration:**
+- first RL run instead of one-shot baselines
+- kept the original stochastic reward without `step_cost`
+- repeated selections were still not masked
 
-**Мотивация:**
-Это была отправная точка исследования: сначала нужно было проверить, способен ли DDQN вообще выучить политику последовательного выбора в базовой постановке. Мы сознательно стартовали с минимального числа новых эвристик, чтобы увидеть естественную динамику агента.
+**Motivation:**  
+This was the starting point of the study: first, we needed to verify whether DDQN could learn a sequential selection policy at all in the basic setup. We deliberately started with the minimum number of new heuristics to observe the agent's natural dynamics.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | reward_mode | stochastic |
 | alpha / beta / gamma | 1.0 / 0.5 / 1.0 |
@@ -261,32 +263,32 @@ done
 | target_update_every | 1 000 |
 | use_action_mask | false |
 
-**Результат:** артефакт не сохранён отдельно, но по журналу обучения агент не научился нажимать `STOP`: `avg_steps ≈ 9`. Политика быстро ушла в стратегию выбора почти всех агентов.
+**Result:** no separate artifact was saved, but the training log shows that the agent did not learn to press `STOP`: `avg_steps ≈ 9`. The policy quickly drifted into selecting almost all agents.
 
-**Вывод:** Агент не научился нажимать STOP: `avg_steps ≈ 9`. `E[penalty] = p_bad × beta = 0.3 × 0.5 = 0.15` слишком мал по сравнению с терминальным штрафом `gamma = 1.0` за пропуск агента. Агент предпочитает перестраховаться и выбирать всех.
+**Conclusion:** the agent did not learn to press `STOP`: `avg_steps ≈ 9`. `E[penalty] = p_bad × beta = 0.3 × 0.5 = 0.15` is too small compared with the terminal penalty `gamma = 1.0` for missing an agent. The agent prefers to play it safe and select everyone.
 
 ---
 
-## 4. DDQN — Итерация 2 (конфиг `ddqn_set_beta1_step005.json`)
+## 4. DDQN - Iteration 2 (config `ddqn_set_beta1_step005.json`)
 
-**Дата:** 2026-02-12
+**Date:** 2026-02-12
 
-**Датасет:** v1, `data/tasks_set.jsonl` (323 записи; test n=49)
+**Dataset:** v1, `data/tasks_set.jsonl` (323 records; test n=49)
 
-**Научная гипотеза:**
-Мы проверяем гипотезу, что увеличение beta (штраф за лишнего агента) и добавление step_cost создадут достаточное давление для раннего STOP.
+**Scientific hypothesis:**  
+We test whether increasing `beta` (penalty for an unnecessary agent) and adding `step_cost` will create enough pressure for earlier `STOP`.
 
-**Изменения относительно предыдущей итерации:**
-- `beta`: `0.5 → 1.0`.
-- `step_cost`: `0.0 → 0.05`.
-- Остальная архитектура и schedule сохранены без изменений.
+**Changes relative to the previous iteration:**
+- `beta`: `0.5 → 1.0`
+- `step_cost`: `0.0 → 0.05`
+- the rest of the architecture and schedule remained unchanged
 
-**Мотивация:**
-После итерации 1 стало ясно, что штраф за лишнего агента слишком слаб по сравнению со страхом недобора. Поэтому следующий шаг был простым reward shaping: усилить наказание за over-selection и сделать каждый дополнительный выбор ощутимо дорогим.
+**Motivation:**  
+After iteration 1, it became clear that the penalty for an unnecessary agent was too weak compared to the fear of under-selection. The next step was simple reward shaping: increase the punishment for over-selection and make each additional step noticeably costly.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | reward_mode | stochastic |
 | alpha / beta / gamma | 1.0 / 1.0 / 1.0 |
@@ -299,32 +301,32 @@ done
 | target_update_every | 1 000 |
 | use_action_mask | false |
 
-**Результат:** отдельный артефакт не сохранён; по логу агент по-прежнему выбирал слишком много агентов и не демонстрировал устойчивого раннего `STOP`.
+**Result:** no separate artifact was saved; according to the log, the agent still selected too many agents and did not show stable early `STOP`.
 
-**Вывод:** Ожидаемый штраф за лишнего агента вырос до `0.35`, но агент по-прежнему предпочитает выбирать больше агентов. Дисбаланс между страхом пропустить (`gamma`) и штрафом за лишнего (`beta × p_bad`) сохраняется.
+**Conclusion:** the expected penalty for an unnecessary agent increased to `0.35`, but the agent still preferred to select more agents. The imbalance between the fear of missing (`gamma`) and the penalty for extras (`beta × p_bad`) remained.
 
 ---
 
-## 5. DDQN — Итерация 3 (конфиг `ddqn_set_beta1_step005_gamma2_nomask.json`)
+## 5. DDQN - Iteration 3 (config `ddqn_set_beta1_step005_gamma2_nomask.json`)
 
-**Дата:** 2026-02-13
+**Date:** 2026-02-13
 
-**Датасет:** v1, `data/tasks_set.jsonl` (323 записи; test n=49)
+**Dataset:** v1, `data/tasks_set.jsonl` (323 records; test n=49)
 
-**Научная гипотеза:**
-Мы проверяем гипотезу, что удвоение терминального штрафа gamma (1.0 → 2.0) усилит сигнал о пропущенных агентах и заставит агента более тщательно выбирать набор.
+**Scientific hypothesis:**  
+We test whether doubling the terminal penalty `gamma` (`1.0 → 2.0`) will strengthen the signal about missed agents and force the agent to select the set more carefully.
 
-**Изменения относительно предыдущей итерации:**
-- `gamma`: `1.0 → 2.0`.
-- Reward остаётся стохастическим.
-- Маскирование действий всё ещё выключено.
+**Changes relative to the previous iteration:**
+- `gamma`: `1.0 → 2.0`
+- reward remains stochastic
+- action masking is still disabled
 
-**Мотивация:**
-Итерация 2 показала, что плоское увеличение штрафа за лишний шаг не меняет поведение радикально. Следующей естественной гипотезой было усилить терминальный сигнал недобора и проверить, начнёт ли агент балансировать precision и recall более разумно.
+**Motivation:**  
+Iteration 2 showed that a flat increase in the penalty for an extra step does not change behavior radically. The next natural hypothesis was to amplify the terminal under-selection signal and see whether the agent would balance precision and recall more sensibly.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | reward_mode | stochastic |
 | alpha / beta / gamma | 1.0 / 1.0 / 2.0 |
@@ -337,32 +339,32 @@ done
 | target_update_every | 1 000 |
 | use_action_mask | false |
 
-**Результат:** `mean_f1 = 0.732`, `mean_jaccard = 0.600`, `precision = 0.638`, `recall = 0.918`, `avg_steps = 8.43` на test `n=49`.
+**Result:** `mean_f1 = 0.732`, `mean_jaccard = 0.600`, `precision = 0.638`, `recall = 0.918`, `avg_steps = 8.43` on test `n=49`.
 
-**Вывод:** Парадоксальный эффект: увеличение gamma усилило страх пропустить агента, что привело к ещё большему over-selection (`avg_steps = 8.43`). Recall вырос (`0.918`), но Precision упал (`0.638`). Это классический precision-recall trade-off при неправильно настроенной reward.
+**Conclusion:** paradoxical effect: increasing `gamma` amplified the fear of missing an agent, which led to even stronger over-selection (`avg_steps = 8.43`). Recall improved (`0.918`), but precision dropped (`0.638`). This is a classic precision-recall trade-off under a poorly calibrated reward.
 
 ---
 
-## 6. DDQN — Итерация 4 (конфиг `ddqn_set_beta1_step005_gamma2_actionmask.json`)
+## 6. DDQN - Iteration 4 (config `ddqn_set_beta1_step005_gamma2_actionmask.json`)
 
-**Дата:** 2026-03-01
+**Date:** 2026-03-01
 
-**Датасет:** v2, `data/tasks_set.jsonl` (1054 записи; test n=159)
+**Dataset:** v2, `data/tasks_set.jsonl` (1054 records; test n=159)
 
-**Научная гипотеза:**
-Мы проверяем гипотезу, что запрет повторного выбора агента (action masking) устранит логические ошибки и улучшит качество выбора набора.
+**Scientific hypothesis:**  
+We test whether forbidding repeated agent selection (action masking) will eliminate logical errors and improve set selection quality.
 
-**Изменения относительно предыдущей итерации:**
-- `use_action_mask`: `false → true`.
-- Буфер увеличен до `100 000`.
-- `target_update_every`: `1000 → 500`.
+**Changes relative to the previous iteration:**
+- `use_action_mask`: `false → true`
+- buffer increased to `100 000`
+- `target_update_every`: `1000 → 500`
 
-**Мотивация:**
-После итерации 3 было важно убрать хотя бы технические артефакты поведения, не связанные с научной гипотезой о `STOP`. Маскирование действий должно было убрать дубли и показать, сколько проблемы связано именно с логикой среды, а сколько с формой reward.
+**Motivation:**  
+After iteration 3, it was important to remove at least technical behavior artifacts unrelated to the scientific `STOP` hypothesis. Action masking was supposed to eliminate duplicates and show how much of the problem comes from environment logic versus reward shape.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | reward_mode | stochastic |
 | alpha / beta / gamma | 1.0 / 1.0 / 2.0 |
@@ -375,104 +377,104 @@ done
 | target_update_every | 500 |
 | use_action_mask | true |
 
-**Результат:** `mean_f1 = 0.721`, `mean_jaccard = 0.600`, `precision = 0.601`, `recall = 0.995`, `avg_steps = 8.70`, `exact_match = 0.101` на test `n=159`.
+**Result:** `mean_f1 = 0.721`, `mean_jaccard = 0.600`, `precision = 0.601`, `recall = 0.995`, `avg_steps = 8.70`, `exact_match = 0.101` on test `n=159`.
 
-**Вывод:** Action masking устранил повторные выборы, но не решил STOP-проблему. `avg_steps = 8.70` — агент по-прежнему выбирает почти всех. В bucket C (`|R| = 7..9`) DDQN достигает уровня Supervised (`F1 = 0.938`), но Supervised стабильно лидирует по F1 и exact_match в целом.
+**Conclusion:** action masking removed repeated selections, but did not solve the `STOP` problem. `avg_steps = 8.70` means the agent still chooses almost everyone. In bucket C (`|R| = 7..9`), DDQN reaches the level of Supervised (`F1 = 0.938`), but Supervised remains consistently ahead on overall F1 and exact match.
 
 ---
 
-## 7. DDQN — Итерация 5 (конфиг `ddqn_jaccard_step005.json`)
+## 7. DDQN - Iteration 5 (config `ddqn_jaccard_step005.json`)
 
-**Дата:** 2026-03-28
+**Date:** 2026-03-28
 
-**Датасет:** v2, `data/tasks_set.jsonl` (1054 записи; test n=159)
+**Dataset:** v2, `data/tasks_set.jsonl` (1054 records; test n=159)
 
-**Научная гипотеза:**
-Мы проверяем гипотезу, что замена стохастической пошаговой reward-функции на детерминированный терминальный Jaccard-reward устранит высокодисперсный обучающий сигнал и позволит Q-сети уверенно оценить действие STOP.
+**Scientific hypothesis:**  
+We test whether replacing the stochastic stepwise reward with a deterministic terminal Jaccard reward will eliminate the high-variance learning signal and allow the Q-network to evaluate the `STOP` action confidently.
 
-**Изменения относительно предыдущей итерации:**
-- Reward полностью заменён на `reward_mode = "jaccard"`.
-- Запущен ablation sweep по `step_cost ∈ {0.01, 0.05, 0.10, 0.20}`.
-- Для sweep использованы короткие прогоны по `50 000` шагов на конфиг.
+**Changes relative to the previous iteration:**
+- reward was fully replaced by `reward_mode = "jaccard"`
+- an ablation sweep over `step_cost ∈ {0.01, 0.05, 0.10, 0.20}` was run
+- short `50 000`-step runs were used for each config in the sweep
 
-**Мотивация:**
-Итерации 1–4 показали, что проблема выглядит не как нехватка одного коэффициента, а как следствие шумной и внутренне противоречивой reward-схемы. Поэтому следующим шагом было убрать стохастику и перейти к сигналу, который напрямую совпадает с целевой set-метрикой.
+**Motivation:**  
+Iterations 1-4 showed that the problem looks less like a missing coefficient and more like a consequence of a noisy and internally contradictory reward scheme. The next step was therefore to remove stochasticity and switch to a signal that directly matches the target set metric.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | reward_mode | jaccard |
 | step_cost | sweep: 0.01 / 0.05 / 0.10 / 0.20 |
-| total_steps | 50 000 на конфиг |
+| total_steps | 50 000 per config |
 | hidden_sizes | [256, 256] |
 | lr / discount | 0.001 / 0.99 |
 | buffer_size / batch_size | 100 000 / 128 |
 | use_action_mask | true |
 
-**Результат:** ablation sweep по `step_cost ∈ {0.01, 0.05, 0.10, 0.20}` показал, что все варианты дают `avg_steps ≥ 8.4`. Отдельные test-артефакты по каждому sweep-конфигу не были сохранены, но качественный итог одинаков: агент застревает в том же локальном оптимуме независимо от величины flat `step_cost`.
+**Result:** the ablation sweep over `step_cost ∈ {0.01, 0.05, 0.10, 0.20}` showed that all variants yield `avg_steps ≥ 8.4`. Separate test artifacts for each sweep config were not saved, but the qualitative outcome was identical: the agent gets stuck in the same local optimum regardless of the flat `step_cost` value.
 
-**Вывод:** Flat `step_cost` не является решением: форма штрафа важнее его абсолютного значения. Маргинальный прирост Jaccard от добавления агента (`~0.06`) всегда превышает flat `step_cost` (`0.05`). Это структурный локальный оптимум, а не параметрическая проблема.
+**Conclusion:** flat `step_cost` is not the solution: the shape of the penalty matters more than its absolute magnitude. The marginal Jaccard gain from adding one more agent (`~0.06`) always exceeds the flat `step_cost` (`0.05`). This is a structural local optimum, not a parametric issue.
 
 ---
 
-## 8. DDQN — Итерация 6 (конфиг `ddqn_jaccard_curriculum.json`)
+## 8. DDQN - Iteration 6 (config `ddqn_jaccard_curriculum.json`)
 
-**Дата:** 2026-03-29
+**Date:** 2026-03-29
 
-**Датасет:** v2, `data/tasks_set.jsonl` (1054 записи; test n=159)
+**Dataset:** v2, `data/tasks_set.jsonl` (1054 records; test n=159)
 
-**Научная гипотеза:**
-Мы проверяем гипотезу, что обучение от простых примеров к сложным (`|R| = 2..3 → 4..6 → все`) позволит агенту сначала выучить навык раннего STOP на задачах где это очевидно выгодно, а затем перенести этот навык на сложные примеры.
+**Scientific hypothesis:**  
+We test whether training from simple examples to harder ones (`|R| = 2..3 → 4..6 → all`) will let the agent first learn early `STOP` on clearly favorable tasks and then transfer that skill to harder examples.
 
-**Изменения относительно предыдущей итерации:**
-- Добавлен curriculum в 3 фазы по сложности `|R|`.
-- Reward остаётся `jaccard` с `step_cost = 0.05`.
-- Полный прогон увеличен до `150 000` шагов.
+**Changes relative to the previous iteration:**
+- added a 3-phase curriculum by `|R|` difficulty
+- reward remains `jaccard` with `step_cost = 0.05`
+- the full run was extended to `150 000` steps
 
-**Мотивация:**
-После провала flat Jaccard стало понятно, что агент может усреднять конфликтующие сигналы от простых и сложных примеров. Curriculum learning должен был временно изолировать задачи, где ранний `STOP` явно выгоден, и затем перенести этот навык на полный датасет.
+**Motivation:**  
+After the flat-Jaccard failure, it became clear that the agent may be averaging conflicting signals from easy and hard examples. Curriculum learning was supposed to temporarily isolate tasks where early `STOP` is clearly beneficial and then transfer that skill to the full dataset.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | reward_mode | jaccard |
 | step_cost | 0.05 |
-| curriculum | 0–50k: `|R|≤3`; 50k–100k: `|R|≤6`; 100k–150k: all |
+| curriculum | 0-50k: `|R|≤3`; 50k-100k: `|R|≤6`; 100k-150k: all |
 | total_steps | 150 000 |
 | hidden_sizes | [256, 256] |
 | lr / discount | 0.001 / 0.99 |
 | buffer_size / batch_size | 100 000 / 128 |
 | use_action_mask | true |
 
-**Результат:** smoke test показал `avg_steps = 6.4` — лучший промежуточный результат до итерации 9. Однако полный прогон `150k` вернул политику к `avg_steps = 9.0`; отдельный точный test `mean_f1` для full-run не был сохранён как самостоятельный артефакт.
+**Result:** the smoke test showed `avg_steps = 6.4` - the best intermediate result before iteration 9. However, the full `150k` run returned the policy to `avg_steps = 9.0`; an exact standalone test `mean_f1` for the full run was not saved separately.
 
-**Вывод:** Curriculum дал временный эффект, но не устойчивый. Catastrophic forgetting в фазе 3 вернул стратегию «выбрать всех». Проблема фундаментальна: нужно менять форму reward, а не только порядок обучения.
+**Conclusion:** curriculum produced a temporary effect, but not a stable one. Catastrophic forgetting in phase 3 brought back the "select all" strategy. The problem is fundamental: the reward shape has to change, not only the training order.
 
 ---
 
-## 9. DDQN — Итерация 7 (конфиг `ddqn_adaptive_jaccard.json`)
+## 9. DDQN - Iteration 7 (config `ddqn_adaptive_jaccard.json`)
 
-**Дата:** 2026-04-05
+**Date:** 2026-04-05
 
-**Датасет:** adaptive full, `data/tasks_set_adaptive_full.jsonl` (871 записей; test n=131)
+**Dataset:** adaptive full, `data/tasks_set_adaptive_full.jsonl` (871 records; test n=131)
 
-**Научная гипотеза:**
-Мы проверяем гипотезу, что расширение состояния контекстным вектором из промежуточных результатов агентов (AdaptiveRoutingEnv) даст агенту информацию недоступную Supervised-классификатору и позволит принимать лучшие решения о продолжении выбора.
+**Scientific hypothesis:**  
+We test whether extending the state with a context vector of intermediate agent outputs (`AdaptiveRoutingEnv`) will provide information unavailable to the supervised classifier and allow better decisions about whether to continue selection.
 
-**Изменения относительно предыдущей итерации:**
-- Введён `AdaptiveRoutingEnv`.
-- Состояние заменено на `[text_vec | selected_mask | context_vec]`.
-- `context_vec` строится из `adaptive.trajectory[*].output`.
-- Reward остаётся `jaccard` + `step_cost = 0.05`.
+**Changes relative to the previous iteration:**
+- introduced `AdaptiveRoutingEnv`
+- state replaced with `[text_vec | selected_mask | context_vec]`
+- `context_vec` is built from `adaptive.trajectory[*].output`
+- reward remains `jaccard` + `step_cost = 0.05`
 
-**Мотивация:**
-Это первая действительно sequential постановка, где RL получает наблюдение, возникающее только после действия. Если эта гипотеза верна, adaptive-среда должна дать DDQN преимущество перед one-shot supervised-router не за счёт одной лишь reward-функции, а за счёт richer state.
+**Motivation:**  
+This is the first genuinely sequential formulation where RL receives an observation that appears only after an action. If the hypothesis is correct, the adaptive environment should give DDQN an advantage over the one-shot supervised router not only because of the reward, but because of the richer state.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | env_mode | adaptive |
 | reward_mode | jaccard |
@@ -483,32 +485,32 @@ done
 | buffer_size / batch_size | 100 000 / 128 |
 | use_action_mask | true |
 
-**Результат:** best val `mean_f1 = 0.6682`, test `mean_f1 = 0.6517`, test `mean_jaccard = 0.5169`, `precision = 0.5514`, `recall = 0.8923`, `avg_steps = 7.7557`.
+**Result:** best val `mean_f1 = 0.6682`, test `mean_f1 = 0.6517`, test `mean_jaccard = 0.5169`, `precision = 0.5514`, `recall = 0.8923`, `avg_steps = 7.7557`.
 
-**Вывод:** Плато с шага `~36k` на уровне `F1 ≈ 0.665`. `context_vec` оказался практически нулевым по полезной информации: TF-IDF encoder обучен в основном на текстах запросов и не знает словарь outputs агентов. Агент обучается игнорировать `context_vec` как неинформативный сигнал.
+**Conclusion:** plateau from step `~36k` at `F1 ≈ 0.665`. `context_vec` turned out to be almost useless: the TF-IDF encoder is trained mostly on request texts and does not know the vocabulary of agent outputs. The agent learns to ignore `context_vec` as an uninformative signal.
 
 ---
 
-## 10. DDQN — Итерация 8 (конфиг `ddqn_adaptive_jaccard_v2.json`)
+## 10. DDQN - Iteration 8 (config `ddqn_adaptive_jaccard_v2.json`)
 
-**Дата:** 2026-04-05
+**Date:** 2026-04-05
 
-**Датасет:** adaptive full, `data/tasks_set_adaptive_full.jsonl` (871 записей; test n=131)
+**Dataset:** adaptive full, `data/tasks_set_adaptive_full.jsonl` (871 records; test n=131)
 
-**Научная гипотеза:**
-Мы проверяем гипотезу, что расширение обучающего корпуса TF-IDF encoder на outputs агентов (`texts + trajectory outputs`) устранит OOV-проблему и сделает `context_vec` информативным.
+**Scientific hypothesis:**  
+We test whether expanding the TF-IDF encoder training corpus with agent outputs (`texts + trajectory outputs`) will eliminate the OOV problem and make `context_vec` informative.
 
-**Изменения относительно предыдущей итерации:**
-- Encoder обучается на совместном корпусе `texts + adaptive.trajectory[*].output`.
-- Добавлен helper `_build_adaptive_corpus()`.
-- Корпус train-энкодера вырос с `609` до `3533` документов.
+**Changes relative to the previous iteration:**
+- encoder is trained on the joint corpus `texts + adaptive.trajectory[*].output`
+- added helper `_build_adaptive_corpus()`
+- train encoder corpus grew from `609` to `3533` documents
 
-**Мотивация:**
-Итерация 7 показала, что adaptive-state теоретически интересен, но представление контекста слишком бедное. Поэтому следующая гипотеза была узко технической: сначала устранить OOV-разрыв между языком запросов и языком промежуточных agent outputs, а уже потом судить о полезности `context_vec`.
+**Motivation:**  
+Iteration 7 showed that the adaptive state is theoretically interesting, but the context representation is too weak. The next hypothesis was therefore narrowly technical: first remove the OOV gap between request language and intermediate agent-output language, and only then evaluate the usefulness of `context_vec`.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | env_mode | adaptive |
 | reward_mode | jaccard |
@@ -520,33 +522,33 @@ done
 | buffer_size / batch_size | 100 000 / 128 |
 | use_action_mask | true |
 
-**Результат:** best val `mean_f1 = 0.6653`, test `mean_f1 = 0.6653`, `mean_jaccard = 0.5310`, `precision = 0.5310`, `recall = 1.0000`, `avg_steps = 9.0000`.
+**Result:** best val `mean_f1 = 0.6653`, test `mean_f1 = 0.6653`, `mean_jaccard = 0.5310`, `precision = 0.5310`, `recall = 1.0000`, `avg_steps = 9.0000`.
 
-**Вывод:** Гипотеза частично подтверждена технически (encoder corpus вырос с `609` до `3533` документов), но не дала улучшения качества. Агент коллапсировал в стратегию «выбрать всех» (`avg_steps = 9.0`). Основное ограничение — не качество encoder, а структурный локальный оптимум flat Jaccard reward.
+**Conclusion:** the hypothesis was partially confirmed technically (encoder corpus grew from `609` to `3533` documents), but it did not improve quality. The agent collapsed into the "select all" strategy (`avg_steps = 9.0`). The main limitation is not encoder quality, but the structural local optimum of flat Jaccard reward.
 
 ---
 
-## 11. DDQN — Итерация 9 probe (конфиг `ddqn_log_lambda010.json`)
+## 11. DDQN - Iteration 9 probe (config `ddqn_log_lambda010.json`)
 
-**Дата:** 2026-04-06
+**Date:** 2026-04-06
 
-**Датасет:** v2 static, `data/splits/` (1054 записи; test n=159)
+**Dataset:** v2 static, `data/splits/` (1054 records; test n=159)
 
-**Научная гипотеза:**
-Мы проверяем гипотезу, что нарастающий логарифмический штраф (адаптация из Puppeteer, Dang et al. NeurIPS 2025) сломает структурный локальный оптимум flat reward: первые шаги дёшевы (агент не боится начинать), поздние шаги дороги (добавление лишних агентов становится убыточным).
+**Scientific hypothesis:**  
+We test whether an increasing logarithmic penalty (adapted from Puppeteer, Dang et al., NeurIPS 2025) will break the structural local optimum of flat reward: early steps are cheap (the agent is not afraid to start), late steps are expensive (adding unnecessary agents becomes unprofitable).
 
-**Изменения относительно предыдущей итерации:**
-- Введён `reward_mode = "jaccard_log"`.
-- `lambda_eff = 0.10`.
-- `discount`: `0.99 → 0.95`, `lr`: `1e-3 → 1e-4`, `target_update_every`: `500 → 200`.
-- Probe ограничен `50 000` шагов.
+**Changes relative to the previous iteration:**
+- introduced `reward_mode = "jaccard_log"`
+- `lambda_eff = 0.10`
+- `discount`: `0.99 → 0.95`, `lr`: `1e-3 → 1e-4`, `target_update_every`: `500 → 200`
+- probe limited to `50 000` steps
 
-**Мотивация:**
-Итерации 5–8 показали, что flat penalties не ломают select-all коллапс. Поэтому следующая гипотеза уже меняла не уровень штрафа, а его геометрию во времени: сделать ранние шаги дешёвыми, а поздние ощутимо дорогими.
+**Motivation:**  
+Iterations 5-8 showed that flat penalties do not break the select-all collapse. The next hypothesis therefore changed not the penalty level, but its geometry over time: make early steps cheap and later steps substantially expensive.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | reward_mode | jaccard_log |
 | lambda_eff | 0.10 |
@@ -557,32 +559,32 @@ done
 | target_update_every | 200 |
 | use_action_mask | true |
 
-**Результат:** `val_mean_f1 = 0.856`, `avg_steps = 4.44`, `precision = 0.940`. STOP-проблема решена впервые за 8 итераций; модель продолжала расти до шага `50k` без признаков плато.
+**Result:** `val_mean_f1 = 0.856`, `avg_steps = 4.44`, `precision = 0.940`. The `STOP` problem was solved for the first time in 8 iterations; the model kept improving up to step `50k` with no sign of plateau.
 
-**Вывод:** Логарифмический штраф сломал select-all коллапс. Однако `epsilon_decay_steps = total_steps = 50k` означало, что в probe-прогоне epsilon быстро упал до `0.05`; позже это оказалось критическим фактором успеха.
+**Conclusion:** the logarithmic penalty broke the select-all collapse. However, `epsilon_decay_steps = total_steps = 50k` meant that epsilon fell to `0.05` quickly in the probe run; later this turned out to be a critical success factor.
 
 ---
 
-## 12. DDQN — Итерация 9 full v1 (конфиг `ddqn_log_lambda010_full.json`)
+## 12. DDQN - Iteration 9 full v1 (config `ddqn_log_lambda010_full.json`)
 
-**Дата:** 2026-04-06
+**Date:** 2026-04-06
 
-**Датасет:** v2 static, `data/splits/` (1054 записи; test n=159)
+**Dataset:** v2 static, `data/splits/` (1054 records; test n=159)
 
-**Научная гипотеза:**
-Полный прогон probe-конфигурации на 150k шагов должен дать дальнейшее улучшение F1 за счёт более длительного обучения.
+**Scientific hypothesis:**  
+A full `150k` run of the probe configuration should further improve F1 thanks to longer training.
 
-**Изменения относительно предыдущей итерации:**
-- Тот же `reward_mode = "jaccard_log"` и `lambda_eff = 0.10`.
-- `total_steps`: `50 000 → 150 000`.
-- Ошибочно оставлен `epsilon_decay_steps = total_steps = 150 000`.
+**Changes relative to the previous iteration:**
+- same `reward_mode = "jaccard_log"` and `lambda_eff = 0.10`
+- `total_steps`: `50 000 → 150 000`
+- mistakenly kept `epsilon_decay_steps = total_steps = 150 000`
 
-**Мотивация:**
-После сильного probe-результата естественным было ожидать, что более длинное обучение улучшит политику ещё сильнее. Этот запуск проверял простую гипотезу «больше шагов = лучше», не меняя остальную конфигурацию.
+**Motivation:**  
+After the strong probe result, it was natural to expect that longer training would further improve the policy. This run tested the simple hypothesis "more steps = better" without changing the rest of the configuration.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | reward_mode | jaccard_log |
 | lambda_eff | 0.10 |
@@ -593,32 +595,32 @@ done
 | target_update_every | 200 |
 | use_action_mask | true |
 
-**Результат:** плато с шага `~62k` на уровне `F1 ≈ 0.710`, `avg_steps = 9.0`. Select-all коллапс вернулся.
+**Result:** plateau from step `~62k` at `F1 ≈ 0.710`, `avg_steps = 9.0`. The select-all collapse returned.
 
-**Вывод:** Диагноз: `epsilon_decay_steps = total_steps = 150k`. Epsilon падал слишком медленно, replay buffer заполнился случайными длинными эпизодами, и Q-сеть обучилась на «мусорных» траекториях. Решение: фиксировать `epsilon_decay_steps = 50000` независимо от `total_steps`.
+**Conclusion:** diagnosis: `epsilon_decay_steps = total_steps = 150k`. Epsilon decayed too slowly, the replay buffer filled with long random episodes, and the Q-network learned from "garbage" trajectories. The fix is to keep `epsilon_decay_steps = 50000` independently of `total_steps`.
 
 ---
 
-## 13. DDQN — Итерация 9 full v2 (конфиг `ddqn_log_lambda010_full_v2.json`)
+## 13. DDQN - Iteration 9 full v2 (config `ddqn_log_lambda010_full_v2.json`)
 
-**Дата:** 2026-04-07
+**Date:** 2026-04-07
 
-**Датасет:** v2 static, `data/splits/` (1054 записи; test n=159)
+**Dataset:** v2 static, `data/splits/` (1054 records; test n=159)
 
-**Научная гипотеза:**
-Мы проверяем гипотезу, что фиксация `epsilon_decay_steps = 50000` (независимо от `total_steps = 150000`) позволит агенту сначала исследовать с правильным давлением, а затем 100k шагов обучаться на качественных эпизодах.
+**Scientific hypothesis:**  
+We test whether fixing `epsilon_decay_steps = 50000` (independently of `total_steps = 150000`) will let the agent first explore under the correct pressure and then spend 100k steps learning from high-quality episodes.
 
-**Изменения относительно предыдущей итерации:**
-- Сохранены `reward_mode = "jaccard_log"` и `lambda_eff = 0.10`.
-- `epsilon_decay_steps`: `150 000 → 50 000`.
-- Остальные гиперпараметры не менялись.
+**Changes relative to the previous iteration:**
+- kept `reward_mode = "jaccard_log"` and `lambda_eff = 0.10`
+- `epsilon_decay_steps`: `150 000 → 50 000`
+- all other hyperparameters unchanged
 
-**Мотивация:**
-Провал full v1 показал, что проблема находится не в самой идее log-reward, а в exploration schedule. Поэтому следующий эксперимент был точечной диагностической правкой: оставить reward неизменным и изменить только скорость decay epsilon.
+**Motivation:**  
+The failure of full v1 showed that the problem was not the idea of log reward itself, but the exploration schedule. The next experiment was therefore a focused diagnostic fix: keep the reward unchanged and modify only epsilon decay speed.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | reward_mode | jaccard_log |
 | lambda_eff | 0.10 |
@@ -629,32 +631,32 @@ done
 | target_update_every | 200 |
 | use_action_mask | true |
 
-**Результат:** `val_mean_f1 = 0.897`, `test_mean_f1 = 0.857`, `avg_steps = 4.50`, `precision = 0.941`, `cost_ratio = 0.847`. Конфиг превзошёл Supervised по precision и exact_match, но уступил лучшему варианту по F1.
+**Result:** `val_mean_f1 = 0.897`, `test_mean_f1 = 0.857`, `avg_steps = 4.50`, `precision = 0.941`, `cost_ratio = 0.847`. This config outperformed Supervised on precision and exact match, but not on F1 versus the best variant.
 
-**Вывод:** Epsilon schedule критичен для log-reward. При быстром decay агент быстро начинает exploit правильной политики. Разрыв `val/test = 0.897 / 0.857` указывает на небольшое переобучение под val-распределение.
+**Conclusion:** the epsilon schedule is critical for log reward. With fast decay, the agent starts exploiting the correct policy quickly. The `val/test = 0.897 / 0.857` gap indicates mild overfitting to the val distribution.
 
 ---
 
-## 14. DDQN — Итерация 9 ablation λ=0.05 (конфиг `ddqn_log_lambda005_full.json`)
+## 14. DDQN - Iteration 9 ablation λ=0.05 (config `ddqn_log_lambda005_full.json`)
 
-**Дата:** 2026-04-07
+**Date:** 2026-04-07
 
-**Датасет:** v2 static, `data/splits/` (1054 записи; test n=159)
+**Dataset:** v2 static, `data/splits/` (1054 records; test n=159)
 
-**Научная гипотеза:**
-Мы проверяем гипотезу, что меньший `λ = 0.05` (менее агрессивный штраф за шаг) улучшит recall (агент будет делать больше шагов и покрывать больше нужных агентов), сохраняя при этом улучшенный precision log-reward.
+**Scientific hypothesis:**  
+We test whether a smaller `λ = 0.05` (less aggressive step penalty) will improve recall (the agent will take more steps and cover more required agents) while preserving the improved precision of log reward.
 
-**Изменения относительно предыдущей итерации:**
-- `lambda_eff`: `0.10 → 0.05`.
-- Сохранён фиксированный `epsilon_decay_steps = 50000`.
-- Остальной log-reward стек не менялся.
+**Changes relative to the previous iteration:**
+- `lambda_eff`: `0.10 → 0.05`
+- kept fixed `epsilon_decay_steps = 50000`
+- the rest of the log-reward stack remained unchanged
 
-**Мотивация:**
-После full v2 стало понятно, что log-reward работает, но `λ = 0.10` может быть слишком агрессивным и рано останавливать политику. Следующий шаг был ablation по силе лог-штрафа, чтобы найти лучший balance между precision и recall.
+**Motivation:**  
+After full v2, it became clear that log reward works, but `λ = 0.10` may be too aggressive and stop the policy too early. The next step was an ablation over log-penalty strength to find the best precision / recall balance.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | reward_mode | jaccard_log |
 | lambda_eff | 0.05 |
@@ -665,32 +667,32 @@ done
 | target_update_every | 200 |
 | use_action_mask | true |
 
-**Результат:** best val `mean_f1 = 0.9015`, test `mean_f1 = 0.8877`, `mean_jaccard = 0.8236`, `precision = 0.9267`, `recall = 0.8652`, `avg_steps = 4.9434`, `cost_ratio = 0.9313`, `exact_match = 0.4403`.
+**Result:** best val `mean_f1 = 0.9015`, test `mean_f1 = 0.8877`, `mean_jaccard = 0.8236`, `precision = 0.9267`, `recall = 0.8652`, `avg_steps = 4.9434`, `cost_ratio = 0.9313`, `exact_match = 0.4403`.
 
-**Вывод:** `λ = 0.05` — лучшая конфигурация исследования. Умеренный логарифмический штраф создаёт правильный баланс: `precision = 0.927` (лучше Supervised `0.836`) при `recall = 0.865` (ниже Supervised `0.952`). DDQN впервые превзошёл Supervised по test F1 (`0.888 vs 0.876`).
+**Conclusion:** `λ = 0.05` is the best configuration of the study. A moderate logarithmic penalty creates the right balance: `precision = 0.927` (better than Supervised `0.836`) with `recall = 0.865` (lower than Supervised `0.952`). DDQN outperformed Supervised on test F1 for the first time (`0.888 vs 0.876`).
 
 ---
 
-## 15. DDQN — Итерация 10 (конфиг `ddqn_adaptive_log_lambda005.json`)
+## 15. DDQN - Iteration 10 (config `ddqn_adaptive_log_lambda005.json`)
 
-**Дата:** 2026-04-07
+**Date:** 2026-04-07
 
-**Датасет:** adaptive full, `data/tasks_set_adaptive_full.jsonl` (871 записей; test n=131)
+**Dataset:** adaptive full, `data/tasks_set_adaptive_full.jsonl` (871 records; test n=131)
 
-**Научная гипотеза:**
-Мы проверяем гипотезу, что комбинация log-reward (решившего STOP-проблему на static) с AdaptiveRoutingEnv (дающей доступ к промежуточным результатам агентов) даст синергетический эффект: агент сможет использовать контекст для более точного решения о продолжении выбора.
+**Scientific hypothesis:**  
+We test whether combining log reward (which solved the `STOP` problem on the static dataset) with `AdaptiveRoutingEnv` (which gives access to intermediate agent outputs) will create a synergistic effect: the agent should use context to decide more accurately whether to continue selection.
 
-**Изменения относительно предыдущей итерации:**
-- Объединены `env_mode = "adaptive"` и `reward_mode = "jaccard_log"`.
-- Использован лучший static-лог-штраф `lambda_eff = 0.05`.
-- Для adaptive-режима добавлены отдельные train/val/test пути и `epsilon_decay_steps = 50000`.
+**Changes relative to the previous iteration:**
+- combined `env_mode = "adaptive"` and `reward_mode = "jaccard_log"`
+- used the best static log penalty `lambda_eff = 0.05`
+- added separate train / val / test paths and `epsilon_decay_steps = 50000` for adaptive mode
 
-**Мотивация:**
-После прорыва на static-датасете логично было проверить, переносится ли этот механизм в richer adaptive-state. Это был главный тест гипотезы о синергии между правильной формой reward и доступом к промежуточному контексту агентов.
+**Motivation:**  
+After the breakthrough on the static dataset, it was natural to test whether the same mechanism transfers to the richer adaptive state. This was the main test of the synergy hypothesis between correct reward geometry and access to intermediate agent context.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
 | env_mode | adaptive |
 | reward_mode | jaccard_log |
@@ -702,25 +704,25 @@ done
 | target_update_every | 200 |
 | use_action_mask | true |
 
-**Результат:** `val_mean_f1 = 0.668`, test `mean_f1 = 0.668`, `mean_jaccard = 0.532`, `precision = 0.568`, `recall = 0.938`, `avg_steps = 8.05`, `cost_ratio = 1.68`. В шагах `56k–66k` наблюдался catastrophic forgetting: F1 кратковременно падал до `~0.16`.
+**Result:** `val_mean_f1 = 0.668`, test `mean_f1 = 0.668`, `mean_jaccard = 0.532`, `precision = 0.568`, `recall = 0.938`, `avg_steps = 8.05`, `cost_ratio = 1.68`. Catastrophic forgetting was observed in steps `56k-66k`: F1 temporarily dropped to about `0.16`.
 
-**Вывод:** Синергии не возникло. Log-reward не помог в adaptive-среде: select-all коллапс вернулся почти полностью. Расширенное state space adaptive env (`4009` против `2009` измерений) требует более мощной Q-сети или лучшего state encoder; TF-IDF `context_vec` остаётся слишком слабым.
+**Conclusion:** the synergy did not appear. Log reward did not help in the adaptive environment: the select-all collapse returned almost completely. The expanded adaptive-state space (`4009` vs `2009` dimensions) requires either a stronger Q-network or a better state encoder; TF-IDF `context_vec` remains too weak.
 
 ---
 
-## Следующие шаги
+## Next Steps
 
-- [x] Увеличить датасет (аугментация через LLM)
-- [x] Попробовать `use_action_mask = true` (запретить повторный выбор)
-- [x] AdaptiveRoutingEnv (итерация 7)
-- [x] Расширенный encoder corpus (итерация 8)
-- [x] Probe 50k для log-reward `lambda_eff = 0.10`
-- [x] Full 150k для log-reward `lambda_eff = 0.10`
-- [x] Исправить `epsilon_decay_steps` для full-run (`50000` вместо `total_steps`)
-- [x] Full 150k ablation log-reward `lambda_eff = 0.05` (`ddqn_log_lambda005_full.json`)
-- [x] Проверить adaptive + log-reward (`ddqn_adaptive_log_lambda005.json`)
-- [ ] Ablation sweep `lambda_eff in {0.03, 0.15}` при необходимости
-- [ ] Dense embeddings для adaptive env
-- [ ] Более мощная сеть / иной RL-алгоритм для adaptive env (например, PPO)
-- [ ] Сравнить с one-shot adaptive policy
-- [ ] Запустить LLM-Router baseline с реальным API-ключом
+- [x] Increase dataset size (LLM augmentation)
+- [x] Try `use_action_mask = true` (forbid repeated selection)
+- [x] `AdaptiveRoutingEnv` (iteration 7)
+- [x] Expanded encoder corpus (iteration 8)
+- [x] 50k probe for log reward `lambda_eff = 0.10`
+- [x] Full 150k for log reward `lambda_eff = 0.10`
+- [x] Fix `epsilon_decay_steps` for the full run (`50000` instead of `total_steps`)
+- [x] Full 150k log-reward ablation `lambda_eff = 0.05` (`ddqn_log_lambda005_full.json`)
+- [x] Check adaptive + log reward (`ddqn_adaptive_log_lambda005.json`)
+- [ ] Ablation sweep `lambda_eff in {0.03, 0.15}` if needed
+- [ ] Dense embeddings for the adaptive env
+- [ ] Stronger network / different RL algorithm for the adaptive env (e.g. PPO)
+- [ ] Compare against a one-shot adaptive policy
+- [ ] Run the LLM-Router baseline with a real API key

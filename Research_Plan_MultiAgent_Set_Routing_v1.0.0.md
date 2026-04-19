@@ -1,15 +1,17 @@
 # Research Plan — Multi-Agent Set Routing with DQN (v1.0.0)
 
-## 1. Контекст и цель
-Мы исследуем задачу **маршрутизации пользовательского запроса через сеть специализированных агентов**, где для каждого запроса требуется **не один агент**, а **набор (set) из 2–9 агентов**.  
-Цель — научиться выбирать **оптимальный набор агентов** для решения запроса, избегая:
-- **недобора** (не выбрали нужных агентов),
-- **перебора** (выбрали лишних агентов).
+## 1. Context and Goal
+We study **routing a user request through a network of specialized agents**, where each request requires **not one agent**, but a **set of 2-9 agents**.  
+The goal is to learn how to choose the **optimal set of agents** for each request while avoiding:
+- **under-selection** (missing required agents),
+- **over-selection** (choosing unnecessary agents).
 
-Порядок вызова агентов **не важен**. Важен итоговый набор.
+The order in which agents are called is **not important**. The final set is what matters.
 
-## 2. Агенты (9 классов)
-Каждый агент — узкая специализация:
+> **Dataset language note:** the dataset was originally created and annotated in Russian. The project documentation is now translated into English, but the underlying request texts remain Russian in the source dataset.
+
+## 2. Agents (9 classes)
+Each agent is a narrow specialization:
 
 0. Code Agent (Python)  
 1. SQL Agent  
@@ -17,194 +19,184 @@
 3. Math Formula Solver  
 4. Structured Extraction Agent (JSON)  
 5. Summarization & Formatting Agent  
-6. Requirements / ТЗ Agent  
+6. Requirements / Spec Agent  
 7. Rewrite / Style Constraints Agent  
 8. Finance / Numeric Computation Agent  
 
-## 3. Постановка задачи (multi-label routing)
-Для каждого запроса задан истинный набор требуемых агентов `R` (|R| ∈ [2, 9]).  
-Роутер выбирает набор агентов `S` (|S| ∈ [2, 9]) через последовательный выбор действий.
+## 3. Problem Formulation (multi-label routing)
+For each request, the true set of required agents is `R` (`|R| ∈ [2, 9]`).  
+The router selects a set of agents `S` (`|S| ∈ [2, 9]`) through a sequence of actions.
 
-Ошибки:
-- **Coverage (покрытие)**: `|S ∩ R|`
-- **Over-selection (перебор)**: `|S \ R|`
-- **Under-selection (недобор)**: `|R \ S|`
+Error categories:
+- **Coverage**: `|S ∩ R|`
+- **Over-selection**: `|S \ R|`
+- **Under-selection**: `|R \ S|`
 
-## 4. Формализация как MDP (для DQN)
-Задача формализуется как MDP (процесс принятия решений), где агент-роутер последовательно выбирает агентов.
+## 4. MDP Formalization (for DQN)
+The task is formalized as an MDP, where the routing agent sequentially chooses agents.
 
-### 4.1 Состояние (State)
-В проекте используются две формулировки состояния.
+### 4.1 State
+The project uses two state formulations.
 
 **Static formulation**
-- текст запроса `text`,
-- маска выбранных агентов `selected_mask` (длина 9, 0/1),
-- признак шага (`step_feature` в коде encoder-а).
+- request text `text`,
+- selected-agent mask `selected_mask` (length 9, 0/1),
+- step indicator (`step_feature` in the encoder code).
 
-Это исходная постановка, где агент видит только исходный запрос и факт уже
-сделанных выборов.
+This is the original formulation, where the agent sees only the original request and the fact of previous selections.
 
 **Adaptive formulation**
-- TF-IDF-вектор запроса `text_vec`,
-- маска выбранных агентов `selected_mask`,
-- контекстный вектор `context_vec`.
+- TF-IDF vector of the request `text_vec`,
+- selected-agent mask `selected_mask`,
+- context vector `context_vec`.
 
-`context_vec` строится из конкатенации outputs уже выбранных агентов из
-`adaptive.trajectory` и кодируется тем же `TfidfStateEncoder`, что и запрос.
-Таким образом, adaptive-среда реализует состояние:
+`context_vec` is built by concatenating the outputs of already selected agents from `adaptive.trajectory` and encoding them with the same `TfidfStateEncoder` as the request itself.
+Therefore, the adaptive environment uses the state:
 
 `state = [text_vec | selected_mask | context_vec]`
 
-Это ключевое расширение постановки: после каждого действия policy получает
-новую информацию, отсутствовавшую в исходном тексте запроса.
+This is the key extension of the formulation: after each action, the policy receives new information that was absent from the original request text.
 
-### 4.2 Действия (Actions)
-- выбрать одного из 9 агентов, которого ещё не выбирали,
-- специальное действие `STOP` (завершить выбор набора).
+### 4.2 Actions
+- choose one of the 9 agents that has not yet been selected,
+- a special `STOP` action (finish set selection).
 
-В текущей реализации повторный выбор зависит от режима:
-- при `use_action_mask = true` повторный выбор действительно запрещён маской действий;
-- при `use_action_mask = false` среда и evaluator технически допускают дубликаты, но такие действия не дают новой полезной информации и обычно ухудшают reward/метрики.
+In the current implementation, repeated selection depends on the mode:
+- when `use_action_mask = true`, repeated selection is genuinely blocked by the action mask;
+- when `use_action_mask = false`, the environment and evaluator technically allow duplicates, but such actions provide no new useful information and usually worsen reward/metrics.
 
-### 4.3 Ограничение по шагам
-- `max_steps = 9` (не больше числа уникальных агентов).
-- `STOP` может быть выполнен на любом шаге.
+### 4.3 Step Limit
+- `max_steps = 9` (no more than the number of unique agents).
+- `STOP` can be taken at any step.
 
-## 5. Модель качества агента (симуляция)
-Мы не вызываем реальный LLM в основной симуляции качества.  
-Предполагается, что:
-- если выбранный агент принадлежит `R`, то он "срабатывает" с вероятностью `p_good = 0.85`,
-- если агент не принадлежит `R`, штраф применяется с вероятностью `p_bad = 0.30`.
+## 5. Agent Quality Model (simulation)
+The main quality simulation does not call a real LLM.  
+Instead, it assumes:
+- if the selected agent belongs to `R`, it "fires successfully" with probability `p_good = 0.85`,
+- if the selected agent does not belong to `R`, a penalty is applied with probability `p_bad = 0.30`.
 
-В v1.0.0 шаг "полезен", если выбран агент из `R` и он ещё не был покрыт ранее.
+In v1.0.0, a step is considered "useful" if the selected agent belongs to `R` and has not been covered before.
 
-## 6. Reward (награда) — оптимизация набора
-Награда определяется так, чтобы:
-- поощрять выбор нужных агентов,
-- штрафовать лишних,
-- штрафовать недобор после завершения.
+## 6. Reward — Set Optimization
+The reward is defined so that it:
+- rewards selecting required agents,
+- penalizes extra agents,
+- penalizes missing agents after termination.
 
-Параметры (стартовые):
-- `alpha = +1.0` за покрытие нового нужного агента,
-- `beta = 0.5` штраф за выбор лишнего агента,
-- `gamma = 1.0` штраф за каждый пропущенный нужный агент при завершении.
-- `step_cost = 0.0` штраф за каждый шаг выбора агента (стимулирует более ранний `STOP`).
+Initial parameters:
+- `alpha = +1.0` for covering a new required agent,
+- `beta = 0.5` penalty for selecting an unnecessary agent,
+- `gamma = 1.0` penalty for each missed required agent at the end,
+- `step_cost = 0.0` penalty for each selection step (encourages earlier `STOP`).
 
-### 6.1 Reward по шагам
-На каждом шаге при выборе агента `a` (и если это не `STOP`):
-- `reward -= step_cost` (штраф за шаг, поощряет быстрый выбор)
-- если `a ∈ R` и ещё не покрыт: `reward += alpha` (с вероятностью `p_good`)
-- если `a ∉ R`: `reward -= beta` (с вероятностью `p_bad`)
-- если `a ∈ R`, но уже был выбран: `reward += 0`
+### 6.1 Per-step Reward
+At each step, when choosing agent `a` (if it is not `STOP`):
+- `reward -= step_cost` (per-step penalty, encourages shorter selections)
+- if `a ∈ R` and is not yet covered: `reward += alpha` (with probability `p_good`)
+- if `a ∉ R`: `reward -= beta` (with probability `p_bad`)
+- if `a ∈ R`, but was already selected: `reward += 0`
 
-### 6.2 Reward на STOP / завершение эпизода
-После `STOP` или достижения `max_steps`:
+### 6.2 Reward at `STOP` / episode termination
+After `STOP` or reaching `max_steps`:
 - `missing = |R \ S|`
 - `reward -= gamma * missing`
 
-Итоговая цель — максимизировать суммарный reward за эпизод.
+The final objective is to maximize total episode reward.
 
 ### 6.3 Alternative: Global Jaccard Reward (Iteration 5+)
 
-**Мотивация:** стохастическая пошаговая награда (§6.1) создаёт высокодисперсные Q-targets и конфликтующие сигналы. Агент боится пропустить нужного агента (из-за большого `gamma`) и одновременно получает слабый штраф за лишнего (`E[penalty] = p_bad × beta`). В результате агент не учится нажимать STOP и выбирает ~9/9 агентов каждый эпизод (avg_steps ≈ 8.70 в итерациях 1–4).
+**Motivation:** the stochastic stepwise reward (§6.1) creates high-variance Q-targets and conflicting signals. The agent fears missing a required agent (because `gamma` is large) while receiving only a weak penalty for an unnecessary one (`E[penalty] = p_bad × beta`). As a result, it does not learn to press `STOP` and selects about 9/9 agents in each episode (`avg_steps ≈ 8.70` in iterations 1-4).
 
-**Новая схема:** фиксированный `step_cost` за каждый шаг + терминальный Jaccard-reward при завершении эпизода.
+**New scheme:** fixed `step_cost` for each step + terminal Jaccard reward at episode end.
 
-Формулы:
-- На каждом шаге (выбор агента): `r_step = -step_cost`
-- На STOP / max_steps: `r_terminal = |S ∩ R| / |S ∪ R|` (Jaccard index)
+Formulas:
+- At each step (agent selection): `r_step = -step_cost`
+- At `STOP` / `max_steps`: `r_terminal = |S ∩ R| / |S ∪ R|` (Jaccard index)
 
-**Преимущества:**
-- Reward напрямую совпадает с метрикой оценки (mean_jaccard)
-- Устраняет стохастику p_good/p_bad из обучающего сигнала
-- Детерминированный сигнал → стабильные Q-targets
+**Advantages:**
+- the reward directly matches the evaluation metric (`mean_jaccard`)
+- it removes `p_good`/`p_bad` stochasticity from the learning signal
+- deterministic signal -> more stable Q-targets
 
-**Компромисс:** более разреженный reward требует больше шагов обучения (150k vs 30k).
+**Trade-off:** the reward becomes sparser and requires more training steps (`150k` vs `30k`).
 
-**Использование:** `reward_mode = "jaccard"` в конфиге и окружении. Класс `RewardSetJaccard` в `sim/reward_set.py`.
+**Usage:** `reward_mode = "jaccard"` in config and environment. Implemented by `RewardSetJaccard` in `sim/reward_set.py`.
 
-В adaptive-экспериментах эта схема используется как базовая, поскольку она:
-- не требует симулировать качество каждого промежуточного output,
-- делает сравнение policy прозрачным через set-метрики,
-- позволяет интерпретировать влияние `context_vec` без дополнительной стохастики в reward.
+In adaptive experiments, this scheme is used as the base because it:
+- does not require simulating the quality of each intermediate output,
+- makes policy comparison transparent through set metrics,
+- allows `context_vec` to be interpreted without extra stochasticity in the reward.
 
 ### 6.4 Logarithmic Step Penalty (Iteration 9+)
 
-**Мотивация:** flat `step_cost` создаёт структурный локальный оптимум:
-маргинальный прирост Jaccard от добавления агента (~0.06) постоянно
-превышает одинаковый штраф за шаг (`0.05`). Агент рационально никогда
-не останавливается.
+**Motivation:** a flat `step_cost` creates a structural local optimum:
+the marginal Jaccard gain from adding one more agent (`~0.06`)
+consistently exceeds the same per-step penalty (`0.05`). The agent therefore rationally never stops.
 
-**Решение (адаптация из Puppeteer, Dang et al. NeurIPS 2025):**
-нарастающий штраф за каждый дополнительный шаг:
+**Solution (adapted from Puppeteer, Dang et al., NeurIPS 2025):**
+an increasing penalty for each additional step:
 
     r_step(t) = -lambda * log(1 + t / max_steps)
     r_terminal = Jaccard(S, R)
 
-где `t` — номер текущего шага (1-indexed), `lambda` — весовой коэффициент.
+where `t` is the current step number (1-indexed), and `lambda` is the weighting coefficient.
 
-**Ключевое свойство:** первые шаги дёшевы (агент не боится
-начинать выбор), поздние шаги дороги (добавление лишних агентов
-становится убыточным). Это ломает структурный локальный оптимум
-стратегии "выбрать всех".
+**Key property:** early steps are cheap (the agent is not afraid to start selecting), while late steps are expensive (adding extra agents becomes unprofitable). This breaks the structural local optimum of the "select all agents" strategy.
 
-**Реализация:** класс `RewardSetLogJaccard` в `sim/reward_set.py`.
-Активируется параметром `reward_mode = "jaccard_log"` в конфиге.
+**Implementation:** `RewardSetLogJaccard` in `sim/reward_set.py`.
+Activated by `reward_mode = "jaccard_log"` in the config.
 
-**Дополнительные гиперпараметры из анализа Puppeteer:**
-- `gamma = 0.95` (вместо `0.99`): агрессивнее дисконтирует будущее,
-  создавая стимул к более раннему STOP
-- `lr = 1e-4` (вместо `1e-3`): стабилизирует обучение при новой
-  форме reward-функции
+**Additional hyperparameters from the Puppeteer analysis:**
+- `gamma = 0.95` (instead of `0.99`): discounts the future more aggressively, creating pressure toward earlier `STOP`
+- `lr = 1e-4` (instead of `1e-3`): stabilizes training under the new reward shape
 
-**Статус экспериментов (v2 static):** см. `EXPERIMENT_LOG.md`, §11. Полный прогон 150k с `lambda_eff=0.05`, `epsilon_decay_steps=50000` (`configs/ddqn_log_lambda005_full.json`) дал на test `mean_f1 ≈ 0.89`, `avg_steps ≈ 4.9`, `cost_ratio ≈ 0.93` — политика перестаёт коллапсировать в выбор всех агентов при ослаблении λ.
+**Experiment status (v2 static):** see `EXPERIMENT_LOG.md`, §11. A full `150k` run with `lambda_eff=0.05`, `epsilon_decay_steps=50000` (`configs/ddqn_log_lambda005_full.json`) achieved test `mean_f1 ≈ 0.89`, `avg_steps ≈ 4.9`, `cost_ratio ≈ 0.93` - the policy no longer collapses into selecting all agents when `λ` is relaxed.
 
-## 7. Датасет
+## 7. Dataset
 
-### 7.1 Размер
-Целевой размер для старта: ~300 запросов.  
-Текущий размер: **1054 запроса** (`data/tasks_set.jsonl`). Датасет расширен после первоначальной версии (323 записи).
+### 7.1 Size
+The initial target size was about 300 requests.  
+The current size is **1054 requests** (`data/tasks_set.jsonl`). The dataset was expanded after the initial version (323 records).
 
-Дополнительно построен **adaptive-датасет** для последовательной постановки:
-- полный пул: **871 записей** (`data/tasks_set_adaptive_full.jsonl`),
-- сплиты: train=609, val=131, test=131 (`data/splits_adaptive/`),
-- каждая запись содержит не только `required_agents`, но и синтетическую
-  траекторию промежуточных outputs агентов.
+An additional **adaptive dataset** was built for the sequential setting:
+- full pool: **871 records** (`data/tasks_set_adaptive_full.jsonl`),
+- splits: train=609, val=131, test=131 (`data/splits_adaptive/`),
+- each record contains not only `required_agents`, but also a synthetic trajectory of intermediate agent outputs.
 
-### 7.2 Баланс
-Примеры балансируются по:
-- размеру `|R|` (запросы, требующие 2..9 агентов),
-- типам сигналов в тексте.
+### 7.2 Balance
+Examples are balanced by:
+- the size `|R|` (requests requiring 2..9 agents),
+- signal types in the text.
 
-### 7.3 Формат данных
-Исходный формат редактирования: `TSV` (удобно править руками).  
-Финальный формат для кода: `JSONL`.
+### 7.3 Data Format
+Editing source format: `TSV` (convenient for manual editing).  
+Final code-ready format: `JSONL`.
 
 **TSV (draft):** `data/tasks_set_draft.tsv`  
-Поля:
+Fields:
 - `id`
-- `required_agents` (строка вида `0,2,4` — уникальные id, 2..9 шт)
-- `difficulty` (исторический столбец; **удаляется** при конвертации в JSONL)
+- `required_agents` (string like `0,2,4` - unique IDs, 2..9 items)
+- `difficulty` (historical column; **removed** during conversion to JSONL)
 - `eval_hint`
 - `text`
 - `notes`
 
 **JSONL (canonical):** `data/tasks_set.jsonl`  
-Одна строка = один JSON-объект. Поле `difficulty` **не включается** в JSONL.
+One line = one JSON object. The `difficulty` field is **not included** in JSONL.
 
-Пример записи:
+Example record:
 ```json
-{"id":"ex_0001","required_agents":[0,2,4],"eval_hint":"код + JSON извлечение","text":"...","notes":"..."}
+{"id":"ex_0001","required_agents":[0,2,4],"eval_hint":"code + JSON extraction","text":"...","notes":"..."}
 ```
 
-Каноничный формат `required_agents`:
-- список `int`, отсортированный по возрастанию, без повторов,
-- каждый элемент в диапазоне 0..8,
-- длина от 2 до 9.
+Canonical format of `required_agents`:
+- list of `int`, sorted ascending, without duplicates,
+- each element in the range `0..8`,
+- length from `2` to `9`.
 
 **Adaptive JSONL:** `data/tasks_set_adaptive_full.jsonl`
 
-Adaptive-версия расширяет базовую запись полем `adaptive.trajectory`:
+The adaptive version extends the base record with the field `adaptive.trajectory`:
 
 ```json
 {
@@ -216,8 +208,8 @@ Adaptive-версия расширяет базовую запись полем 
       {
         "agent_id": 1,
         "agent_name": "SQL Agent",
-        "output": "Сформирован SQL-запрос ...",
-        "remaining_gap": "Нужен анализ retention и краткая сводка",
+        "output": "SQL query prepared ...",
+        "remaining_gap": "Retention analysis and a short summary are still needed",
         "is_last": false
       }
     ]
@@ -225,189 +217,180 @@ Adaptive-версия расширяет базовую запись полем 
 }
 ```
 
-Интерпретация полей:
-- `output` — текст, который становится наблюдаемым контекстом после выбора агента,
-- `remaining_gap` — какая часть задачи ещё не закрыта после данного шага,
-- `is_last` — индикатор последнего шага в сгенерированной траектории.
+Field interpretation:
+- `output`: text that becomes the observable context after selecting the agent,
+- `remaining_gap`: which part of the task is still not covered after this step,
+- `is_last`: indicator of the final step in the generated trajectory.
 
-### 7.4 Разбиение на сплиты
-Скрипт `tools/split_jsonl_set.py` разбивает датасет на train / val / test.
+### 7.4 Train / Val / Test Splits
+The script `tools/split_jsonl_set.py` splits the dataset into train / val / test.
 
-- Поддерживается **стратифицированный** split по `k = len(required_agents)` (по умолчанию).
-- Гарантируется, что каждый bucket `k` представлен в val и test (при наличии >= 3 записей в группе).
-- Доли по умолчанию: train=0.70, val=0.15, test=0.15.
-- Результат: `data/splits/{train,val,test}.jsonl`.
+- It supports **stratified** splitting by `k = len(required_agents)` (default).
+- It guarantees that each bucket `k` appears in val and test (if there are at least 3 records in the group).
+- Default proportions: train=0.70, val=0.15, test=0.15.
+- Output: `data/splits/{train,val,test}.jsonl`.
 
-Для adaptive-датасета используется отдельный скрипт `tools/split_adaptive_dataset.py`,
-который повторяет ту же стратификацию по `|R|` и пишет результат в
+For the adaptive dataset, a separate script `tools/split_adaptive_dataset.py` is used.
+It repeats the same stratification by `|R|` and writes the result to
 `data/splits_adaptive/{train,val,test}.jsonl`.
 
-### 7.5 Генерация adaptive-аннотаций
+### 7.5 Generating Adaptive Annotations
 
-Adaptive-датасет нужен не для переопределения ground truth, а для моделирования
-последовательного частичного наблюдения. Для этого используется генератор
-`tools/generate_adaptive_dataset.py`, который для каждого запроса строит
-траекторию промежуточных шагов по списку `required_agents`.
+The adaptive dataset is not meant to redefine ground truth; it models sequential partial observability.
+For this purpose, `tools/generate_adaptive_dataset.py` builds a trajectory of intermediate steps for each request based on its `required_agents`.
 
-Научный смысл такой генерации:
-- policy получает информацию, которая появляется только **после** действия,
-- supervised multi-label baseline не может использовать эту информацию,
-- RL получает принципиально более богатую постановку, чем one-shot prediction.
+Scientific motivation for this generation:
+- the policy receives information that appears only **after** an action,
+- the supervised multi-label baseline cannot use this information,
+- RL gets a fundamentally richer setting than one-shot prediction.
 
-## 8. Baseline-модели (4 шт)
-Во всех baseline результат — это набор агентов `S`, интерпретируемый как итоговая последовательность выбранных агентов до остановки/лимита. Для `Random`, `Rule-based` и `Supervised` в текущей реализации наборы формируются без повторов; evaluator при этом остаётся более общим и умеет обрабатывать дубликаты.
+## 8. Baseline Models (4)
+For all baselines, the result is a set of agents `S`, interpreted as the final sequence of selected agents before stopping / reaching the limit. In the current implementation, `Random`, `Rule-based`, and `Supervised` produce sets without duplicates; the evaluator remains more general and can handle duplicates if they appear.
 
-1) **Random Routing** (`run_random_set.py`)  
-Случайно выбирает агентов до остановки/лимита (без повторов).
+1. **Random Routing** (`run_random_set.py`)  
+Selects agents randomly until stopping / hitting the limit (without duplicates).
 
-2) **Rule-Based Routing** (`run_rule_set.py`)  
-Извлекает агентов по триггерным словам/паттернам.  
-Если выбрано слишком мало — добивает случайными.  
-Если слишком много — обрезает по приоритетам.
+2. **Rule-Based Routing** (`run_rule_set.py`)  
+Extracts agents via trigger words / patterns.  
+If too few agents are selected, it pads with random ones.  
+If too many are selected, it trims by priority.
 
-3) **Supervised Router** (`run_supervised_set.py`)  
-TF-IDF (1,2)-gram + OneVsRest(LogisticRegression) → multi-hot → agent set.  
-Порог отсечения выбирается sweep-ом на val по максимуму mean_f1.  
-Гарантируется минимум 2 агента, максимум 9.
+3. **Supervised Router** (`run_supervised_set.py`)  
+TF-IDF `(1,2)`-gram + `OneVsRest(LogisticRegression)` -> multi-hot -> agent set.  
+The threshold is selected by a sweep on the val split, maximizing `mean_f1`.  
+A minimum of 2 agents and a maximum of 9 are guaranteed.
 
-4) **LLM-Router (API + prompt)** (`run_llm_set.py`)  
-Реальный LLM по системному промпту возвращает список agent_id (2..9) в JSON-формате.  
-Промпт — recall-biased: приоритет на полноту (не пропустить нужного агента), с внутренним чеклистом подзадач.  
-Версия промпта фиксируется константой `PROMPT_VERSION` (текущая: `v2-recall-biased`).
+4. **LLM-Router (API + prompt)** (`run_llm_set.py`)  
+A real LLM, guided by a system prompt, returns a JSON list of `agent_id` values (`2..9`).  
+The prompt is recall-biased: it prioritizes completeness (not missing required agents) and includes an internal checklist of subtasks.  
+The prompt version is fixed by the constant `PROMPT_VERSION` (current: `v2-recall-biased`).
 
-**Кэширование:**  
-- Кэш хранится в JSONL-файле (по умолчанию `cache/llm_router_cache.jsonl`).  
-- Ключ кэша: `id` элемента, фильтрация по `model` + `prompt_version`.  
-- При смене модели или версии промпта старый кэш автоматически игнорируется — элементы перезапрашиваются через API.  
-- Каждая запись в кэше содержит: `id`, `pred`, `raw`, `model`, `prompt_version`.
+**Caching:**  
+- the cache is stored in a JSONL file (default: `cache/llm_router_cache.jsonl`)  
+- cache key: item `id`, filtered by `model` + `prompt_version`  
+- if the model or prompt version changes, the old cache is automatically ignored and items are re-requested via API  
+- each cache entry contains: `id`, `pred`, `raw`, `model`, `prompt_version`
 
-**Обработка ошибок:**  
-- До `max_retries` повторных запросов при сбое API или невалидном JSON.  
-- Keyword fallback при полном провале парсинга (гарантирует ≥ 2 агента).
+**Error handling:**  
+- up to `max_retries` repeated requests on API failure or invalid JSON  
+- keyword fallback on complete parsing failure (guarantees at least 2 agents)
 
-## 9. Основной метод: DQN
-DQN обучается выбирать действия (агент или STOP), максимизируя ожидаемый суммарный reward.  
-Состояние включает текст и маску уже выбранных агентов.
+## 9. Main Method: DQN
+DQN is trained to choose actions (an agent or `STOP`) that maximize expected cumulative reward.  
+The state includes the text and the mask of already selected agents.
 
-### 9.1 AdaptiveRoutingEnv и научная мотивация
+### 9.1 AdaptiveRoutingEnv and Scientific Motivation
 
-В static-постановке RL получает мало преимуществ перед supervised-router:
-если всё наблюдение известно заранее, задачу можно решать как multi-label
-классификацию за один шаг.
+In the static setting, RL has little advantage over the supervised router:
+if the full observation is known in advance, the task can be solved as one-step multi-label classification.
 
-AdaptiveRoutingEnv меняет это свойство. После выбора агента policy получает
-его `output`, который обновляет `context_vec` и может изменить следующий выбор.
-Это превращает routing в задачу **последовательного сбора информации**:
-выборы влияют не только на reward, но и на будущие наблюдения.
+`AdaptiveRoutingEnv` changes this property. After an agent is selected, the policy receives its `output`, which updates `context_vec` and can change the next decision.
+This turns routing into a problem of **sequential information acquisition**:
+choices affect not only reward, but also future observations.
 
-Именно здесь RL получает теоретическое преимущество:
-- доступ к промежуточному контексту,
-- возможность менять policy после каждого шага,
-- естественную интерпретацию действия `STOP` как решения о достаточности информации.
+This is exactly where RL gains a theoretical advantage:
+- access to intermediate context,
+- the ability to adapt policy after each step,
+- a natural interpretation of `STOP` as a decision that enough information has been collected.
 
 ### 9.2 Curriculum Learning
 
-Стандартный равномерный сэмплинг из всего датасета создаёт
-конфликтующие обучающие сигналы: для примеров с малым |R| ранняя
-остановка оптимальна, для больших |R| — нет. Агент усредняет эти
-сигналы и выбирает стратегию "выбрать всех агентов" (avg_steps ≈ 8.7).
+Standard uniform sampling over the full dataset creates conflicting learning signals:
+for examples with small `|R|`, early stopping is optimal; for large `|R|`, it is not.
+The agent averages these signals and falls back to the strategy "select all agents" (`avg_steps ≈ 8.7`).
 
-Curriculum Learning решает это, организуя обучение в три фазы
-по возрастанию сложности |R|. В фазе 1 агент видит только примеры
-с |R| ∈ {2,3} и получает однозначный сигнал: останавливаться рано —
-всегда правильно. Приобретённый навык переносится на более сложные
-примеры в фазах 2 и 3.
+Curriculum learning addresses this by organizing training into three phases
+with increasing difficulty in `|R|`. In phase 1, the agent sees only examples
+with `|R| ∈ {2,3}` and receives an unambiguous signal: stopping early is always correct.
+This learned skill is then transferred to more complex examples in phases 2 and 3.
 
-Реализация: параметр `curriculum.enabled` в конфиге;
-метод `env.set_items()` переключает активный пул примеров
-в заданные моменты обучения.
+Implementation: the config parameter `curriculum.enabled`;
+the method `env.set_items()` switches the active example pool at predefined points during training.
 
-### 9.3 Shared-vocabulary hypothesis for `context_vec`
+### 9.3 Shared-vocabulary Hypothesis for `context_vec`
 
-В adaptive-среде `context_vec` кодируется тем же TF-IDF encoder-ом, что и сам
-запрос. Это создаёт важную методологическую проблему: если encoder обучен
-только на query texts, значительная часть лексики из outputs агентов становится
-out-of-vocabulary. Тогда `context_vec` вырождается почти в нулевой сигнал, и
-policy фактически игнорирует главное отличие adaptive-постановки.
+In the adaptive environment, `context_vec` is encoded with the same TF-IDF encoder as the request itself.
+This creates an important methodological issue: if the encoder is trained only on query texts,
+a large share of the vocabulary from agent outputs becomes out-of-vocabulary.
+Then `context_vec` degenerates into an almost zero signal, and the policy effectively ignores the main difference of the adaptive setting.
 
-Отсюда возникла гипотеза iteration 8:
-- обучить encoder на совместном корпусе `texts + adaptive.trajectory[*].output`,
-- получить общий словарь для query space и context space,
-- усилить информативность `context_vec`.
+This led to the iteration 8 hypothesis:
+- train the encoder on the joint corpus `texts + adaptive.trajectory[*].output`,
+- obtain a shared vocabulary for the query space and the context space,
+- increase the informativeness of `context_vec`.
 
-Эксперимент показал, что эта гипотеза **не является достаточной**:
-словарное покрытие улучшилось, но policy всё равно коллапсировала в стратегию
-максимального recall. Следовательно, bottleneck лежит не только в encoder-е, но
-и в самой оптимизационной динамике `STOP` под Jaccard-reward.
+The experiment showed that this hypothesis is **not sufficient**:
+vocabulary coverage improved, but the policy still collapsed into a maximum-recall strategy.
+Therefore, the bottleneck lies not only in the encoder, but also in the optimization dynamics of `STOP` under Jaccard reward.
 
-## 10. Метрики оценки
+## 10. Evaluation Metrics
 
-### 10.1 Основные метрики (global)
-Для каждого метода считаем (на тестовом наборе):
+### 10.1 Main Metrics (global)
+For each method, we compute the following on the test set:
 
-| Метрика | Описание |
+| Metric | Description |
 |---|---|
-| `mean_episode_reward` | Средняя суммарная награда за эпизод |
-| `success_rate` | Доля задач, где `missing = 0` (все нужные агенты покрыты) |
-| `exact_match_rate` | Доля задач, где `set(S) == set(R)` (точное совпадение наборов) |
-| `mean_jaccard` | Среднее Jaccard: `|S ∩ R| / |S ∪ R|` |
-| `mean_precision` | Среднее Precision: `|S ∩ R| / |S|` |
-| `mean_recall` | Среднее Recall: `|S ∩ R| / |R|` |
-| `mean_f1` | Среднее F1: `2 * precision * recall / (precision + recall)` |
-| `avg_steps` | Средняя длина выбранного набора |
-| `avg_coverage` | Среднее `|S ∩ R|` |
-| `avg_overselection` | Среднее `|S \ R|` |
-| `avg_underselection` | Среднее `|R \ S|` |
+| `mean_episode_reward` | Average total episode reward |
+| `success_rate` | Share of tasks where `missing = 0` (all required agents are covered) |
+| `exact_match_rate` | Share of tasks where `set(S) == set(R)` (exact set match) |
+| `mean_jaccard` | Average Jaccard: `|S ∩ R| / |S ∪ R|` |
+| `mean_precision` | Average precision: `|S ∩ R| / |S|` |
+| `mean_recall` | Average recall: `|S ∩ R| / |R|` |
+| `mean_f1` | Average F1: `2 * precision * recall / (precision + recall)` |
+| `avg_steps` | Average selected-set length |
+| `avg_coverage` | Average `|S ∩ R|` |
+| `avg_overselection` | Average `|S \ R|` |
+| `avg_underselection` | Average `|R \ S|` |
 
-### 10.2 Метрики по bucket-ам
-Все метрики из §10.1 рассчитываются дополнительно по трём группам сложности (по размеру целевого набора):
+### 10.2 Bucket Metrics
+All metrics from §10.1 are also computed for three difficulty groups (by target-set size):
 
-| Bucket | Размеры `|R|` | Характеристика |
+| Bucket | Sizes `|R|` | Characterization |
 |---|---|---|
-| **A** | {2, 3} | Малые наборы — проще выбрать, выше риск over-selection |
-| **B** | {4, 5, 6} | Средние наборы — основная масса данных |
-| **C** | {7, 8, 9} | Большие наборы — выше риск under-selection (ранний STOP) |
+| **A** | {2, 3} | Small sets - easier to select, higher over-selection risk |
+| **B** | {4, 5, 6} | Medium sets - the bulk of the data |
+| **C** | {7, 8, 9} | Large sets - higher under-selection risk (early `STOP`) |
 
-### 10.3 Выбор порога (Supervised Router)
-Sweep threshold на val-сплите с ранжированием:
+### 10.3 Threshold Selection (Supervised Router)
+Threshold sweep on the val split with this ranking:
 1. max `mean_f1`
 2. max `mean_jaccard`
 3. max `mean_episode_reward`
 4. min `avg_steps`
 
-## 11. Воспроизводимость
-- Фиксируем сиды для генераторов случайности.
-- Сохраняем версию датасета и параметры reward в репозитории.
-- Все эксперименты запускаются скриптами из `src/multiagent_dqn_routing/experiments/`.
-- Стратифицированный split гарантирует представленность всех размеров `|R|` в каждом сплите.
-- LLM-Router: версия промпта (`PROMPT_VERSION`) фиксируется в коде и записывается в кэш. При смене версии кэш автоматически инвалидируется (старые записи игнорируются по несовпадению `prompt_version`).
-- Для adaptive-режима фиксируются отдельные артефакты: `data/tasks_set_adaptive_full.jsonl`, `data/splits_adaptive/*.jsonl`, конфиги `ddqn_adaptive_jaccard*.json`.
-- Smoke-check для iteration 8 должен печатать размер расширенного encoder corpus, что служит проверкой корректного включения `adaptive.trajectory[*].output` в обучение TF-IDF.
+## 11. Reproducibility
+- Random seeds are fixed for all stochastic generators.
+- Dataset versions and reward parameters are stored in the repository.
+- All experiments are run via scripts in `src/multiagent_dqn_routing/experiments/`.
+- The stratified split guarantees representation of all `|R|` sizes in each split.
+- For `LLM-Router`, the prompt version (`PROMPT_VERSION`) is fixed in code and stored in cache. When the version changes, the cache is automatically invalidated (old entries are ignored when `prompt_version` does not match).
+- For adaptive mode, separate artifacts are fixed: `data/tasks_set_adaptive_full.jsonl`, `data/splits_adaptive/*.jsonl`, and configs `ddqn_adaptive_jaccard*.json`.
+- The smoke-check for iteration 8 must print the expanded encoder-corpus size, which serves as a sanity check that `adaptive.trajectory[*].output` was correctly included in TF-IDF training.
 
-### 11.1 Критические гиперпараметры
+### 11.1 Critical Hyperparameters
 
-При воспроизведении результатов итерации 9 обратить особое внимание:
-- `epsilon_decay_steps` должен быть **равен 50000**, а не `total_steps`
-- При `epsilon_decay_steps = total_steps` воспроизводится plateau (итерация 9 full v1), а не лучший результат
-- Это задокументированная ловушка воспроизводимости
+When reproducing the iteration 9 results, pay special attention to:
+- `epsilon_decay_steps` must be **equal to 50000**, not `total_steps`
+- when `epsilon_decay_steps = total_steps`, you reproduce the plateau (iteration 9 full v1), not the best result
+- this is a documented reproducibility trap
 
-## 12. Итоги экспериментов
+## 12. Experimental Outcomes
 
-### 12.1 Хронология итераций
+### 12.1 Iteration Timeline
 
-| Итерация | Ключевое изменение | avg_steps | F1 (test) | Вывод |
+| Iteration | Key change | avg_steps | F1 (test) | Conclusion |
 |---|---|---|---|---|
-| 1 | Базовый DDQN | ~9.0 | ~0.70 | STOP не работает |
-| 2 | `beta↑`, `step_cost` | ~9.0 | ~0.71 | Не помогло |
-| 3 | `gamma↑` | 8.43 | 0.732 | Хуже precision |
-| 4 | Action masking | 8.70 | 0.721 | STOP не решён |
-| 5 | Jaccard flat reward | 8.4–8.9 | ~0.71 | Структурный оптимум |
+| 1 | Base DDQN | ~9.0 | ~0.70 | `STOP` does not work |
+| 2 | `beta↑`, `step_cost` | ~9.0 | ~0.71 | Did not help |
+| 3 | `gamma↑` | 8.43 | 0.732 | Worse precision |
+| 4 | Action masking | 8.70 | 0.721 | `STOP` still unresolved |
+| 5 | Flat Jaccard reward | 8.4-8.9 | ~0.71 | Structural optimum |
 | 6 | Curriculum | 9.0 | ~0.71 | Catastrophic forgetting |
-| 7 | Adaptive env | 7.76 | 0.652 | OOV проблема |
-| 8 | Расширенный encoder | 9.0 | 0.665 | Не помогло |
-| **9** | **Log-reward λ=0.05** | **4.94** | **0.888** | **ПРОРЫВ** |
-| 10 | Adaptive + log-reward | 8.05 | 0.668 | Dense embeddings нужны |
+| 7 | Adaptive env | 7.76 | 0.652 | OOV problem |
+| 8 | Expanded encoder | 9.0 | 0.665 | Did not help |
+| **9** | **Log reward λ=0.05** | **4.94** | **0.888** | **BREAKTHROUGH** |
+| 10 | Adaptive + log reward | 8.05 | 0.668 | Dense embeddings are needed |
 
-### 12.2 Главный вывод
+### 12.2 Main Conclusion
 
-Логарифмический штраф за шаг (адаптация из Puppeteer, Dang et al. NeurIPS 2025) является ключевым механизмом для решения STOP-проблемы в sequential set selection с DDQN. Flat `step_cost` создаёт структурный локальный оптимум; нарастающий штраф делает late steps убыточными.
+The logarithmic per-step penalty (adapted from Puppeteer, Dang et al., NeurIPS 2025) is the key mechanism for solving the `STOP` problem in sequential set selection with DDQN. A flat `step_cost` creates a structural local optimum; an increasing penalty makes late steps unprofitable.

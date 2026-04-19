@@ -1,138 +1,140 @@
 # Tools
 
-Вспомогательные скрипты для работы с датасетом. Запускаются из **корня проекта**.
+Utility scripts for working with the dataset. Run them from the **project root**.
+
+> **Dataset language note:** the source dataset was originally created in Russian. These tools preserve that dataset content; this file only translates the documentation into English.
 
 ---
 
 ## tsv_to_jsonl.py
 
-Конвертирует TSV-черновик в JSONL-датасет.
+Converts the TSV draft into the JSONL dataset.
 
-| Вход | Выход |
+| Input | Output |
 |------|-------|
 | `data/tasks_set_draft.tsv` | `data/tasks_set.jsonl` |
 
-Если входной файл не найден, он пропускается с предупреждением.
+If the input file is missing, it is skipped with a warning.
 
-### Запуск
+### Run
 
 ```bash
 python tools/tsv_to_jsonl.py
 ```
 
-### tasks_set_draft.tsv → tasks_set.jsonl
+### `tasks_set_draft.tsv` -> `tasks_set.jsonl`
 
-**Заголовок:**
+**Header:**
 
 ```
 id	required_agents	difficulty	eval_hint	text	notes
 ```
 
-**Преобразования:**
+**Transformations:**
 
-- `required_agents` хранится как строка `"0,2,4"` и преобразуется в отсортированный список int `[0, 2, 4]`;
-- `difficulty` — столбец TSV присутствует для совместимости, но **не включается** в выходной JSONL.
+- `required_agents` is stored as a string like `"0,2,4"` and converted into the sorted integer list `[0, 2, 4]`
+- `difficulty` is present in the TSV for compatibility, but is **not included** in the output JSONL
 
-**Валидация:**
+**Validation:**
 
-- все `id` уникальны и не пустые;
-- `required_agents`: от 2 до 9 элементов, все уникальные, каждый в диапазоне 0..8;
-- число колонок в каждой строке равно 6.
+- all `id` values must be unique and non-empty
+- `required_agents` must contain 2 to 9 elements, all unique, each in the range `0..8`
+- every row must contain exactly 6 columns
 
-### Общее поведение
+### General Behavior
 
-- пустые строки пропускаются;
-- JSON пишется в UTF-8 без ASCII-экранирования (`ensure_ascii=False`);
-- при ошибке выводится сообщение с номером строки и программа останавливается.
+- empty lines are skipped
+- JSON is written as UTF-8 without ASCII escaping (`ensure_ascii=False`)
+- on error, the script prints the line number and stops
 
 ---
 
 ## dataset_stats_set.py
 
-Валидация и статистика для `data/tasks_set.jsonl`.
+Validation and statistics for `data/tasks_set.jsonl`.
 
-### Запуск
+### Run
 
 ```bash
-python tools/dataset_stats_set.py [путь_к_файлу]
+python tools/dataset_stats_set.py [path_to_file]
 ```
 
-По умолчанию: `data/tasks_set.jsonl`.
+Default: `data/tasks_set.jsonl`.
 
-### Что проверяет
+### What It Checks
 
-- обязательные поля: `id`, `text`, `required_agents`;
-- `required_agents`: список int, уникальный, диапазон 0..8, длина 2..9;
-- уникальность `id` по всему файлу.
+- required fields: `id`, `text`, `required_agents`
+- `required_agents`: list of ints, unique, range `0..8`, length `2..9`
+- uniqueness of `id` across the whole file
 
-### Что выводит
+### What It Prints
 
-- общее количество записей;
-- распределение по `len(required_agents)` (2..9);
-- частота каждого агента (0..8);
-- топ-10 сигнатур `required_agents`;
-- количество текстов < 20 символов.
+- total number of records
+- distribution by `len(required_agents)` (`2..9`)
+- frequency of each agent (`0..8`)
+- top-10 `required_agents` signatures
+- number of texts shorter than 20 characters
 
-При наличии ошибок выводит до 20 и завершается с `exit(1)`.
+If errors are found, it prints up to 20 of them and exits with `exit(1)`.
 
 ---
 
 ## fix_dataset.py
 
-Однократный скрипт для каноникализации `data/tasks_set.jsonl`.
+One-off script for canonicalizing `data/tasks_set.jsonl`.
 
-### Запуск
+### Run
 
 ```bash
 python tools/fix_dataset.py
 ```
 
-### Что делает
+### What It Does
 
-1. Удаляет поле `difficulty` из каждой записи.
-2. Приводит `required_agents` к каноническому виду (sorted, unique, int 0..8, len 2..9).
-3. Валидация перед сохранением (если не проходит — файл не перезаписывается).
-4. Создаёт бэкап: `data/tasks_set.jsonl.bak`.
-5. Печатает отчёт: сколько записей обработано, у скольких удалён `difficulty`, у скольких изменён `required_agents`.
+1. Removes the `difficulty` field from each record.
+2. Converts `required_agents` to canonical form (`sorted`, `unique`, `int 0..8`, `len 2..9`).
+3. Validates before saving (if validation fails, the file is not overwritten).
+4. Creates a backup: `data/tasks_set.jsonl.bak`.
+5. Prints a report: how many records were processed, how many had `difficulty` removed, and how many had `required_agents` changed.
 
 ---
 
 ## split_jsonl_set.py
 
-Разбиение `data/tasks_set.jsonl` на train / val / test сплиты.
+Splits `data/tasks_set.jsonl` into train / val / test subsets.
 
-### Запуск
+### Run
 
 ```bash
-python tools/split_jsonl_set.py [опции]
+python tools/split_jsonl_set.py [options]
 ```
 
-### Опции
+### Options
 
-| Флаг | По умолчанию | Описание |
+| Flag | Default | Description |
 |------|-------------|----------|
-| `--in_path` | `data/tasks_set.jsonl` | Путь к исходному JSONL |
-| `--out_dir` | `data/splits` | Директория для сплитов |
-| `--seed` | `42` | Seed для перемешивания |
-| `--train` | `0.70` | Доля train |
-| `--val` | `0.15` | Доля val |
-| `--test` | `0.15` | Доля test |
-| `--stratify_by_set_size` | `1` | `1` = стратификация по `|R|`, `0` = простой split |
+| `--in_path` | `data/tasks_set.jsonl` | Path to the input JSONL |
+| `--out_dir` | `data/splits` | Output directory for the splits |
+| `--seed` | `42` | Shuffle seed |
+| `--train` | `0.70` | Train share |
+| `--val` | `0.15` | Validation share |
+| `--test` | `0.15` | Test share |
+| `--stratify_by_set_size` | `1` | `1` = stratify by `|R|`, `0` = plain split |
 
-### Стратификация (по умолчанию)
+### Stratification (default)
 
-- Группирует записи по `k = len(required_agents)` (k от 2 до 9).
-- Внутри каждой группы — shuffle с seed, затем разбиение по долям.
-- Гарантии: при `n >= 3` в группе — val >= 1, test >= 1; при `n == 2` — train=1, test=1; при `n == 1` — train=1 + предупреждение.
-- Финальный shuffle каждого сплита для случайного порядка.
+- groups records by `k = len(required_agents)` (`k` from 2 to 9)
+- inside each group: shuffle with seed, then split by proportions
+- guarantees: if `n >= 3` in a group -> `val >= 1`, `test >= 1`; if `n == 2` -> `train=1`, `test=1`; if `n == 1` -> `train=1` plus a warning
+- each split is shuffled again at the end
 
-### Вывод
+### Output
 
-- Итоговые размеры train / val / test.
-- Таблица counts по `k` (2..9) для каждого сплита.
-- Предупреждения о покрытии агентов в train.
+- final train / val / test sizes
+- counts table by `k` (`2..9`) for each split
+- warnings about agent coverage in train
 
-### Результат
+### Result
 
 ```
 data/splits/
@@ -145,27 +147,27 @@ data/splits/
 
 ## generate_adaptive_dataset.py
 
-Генерация `adaptive.trajectory` для adaptive-экспериментов через OpenAI-compatible API.
+Generates `adaptive.trajectory` for adaptive experiments through an OpenAI-compatible API.
 
-### Безопасная конфигурация
+### Secure Configuration
 
-Секретный ключ **не должен** храниться в коде или в git. Скрипт читает его из env:
+The secret key **must not** be stored in code or in git. The script reads it from the environment:
 
-- `ADAPTIVE_LLM_API_KEY` — обязательно
-- `ADAPTIVE_LLM_BASE_URL` — опционально
-- `ADAPTIVE_LLM_MODEL` — опционально, по умолчанию `qwen3-32b`
+- `ADAPTIVE_LLM_API_KEY` - required
+- `ADAPTIVE_LLM_BASE_URL` - optional
+- `ADAPTIVE_LLM_MODEL` - optional, default `qwen3-32b`
 
-### Запуск
+### Run
 
 ```bash
 cp .env.example .env
-# заполните .env своими значениями
+# fill in .env with your values
 source .env
 
 python tools/generate_adaptive_dataset.py
 ```
 
-Можно переопределять несекретные параметры флагами:
+You can override non-secret parameters with flags:
 
 ```bash
 python tools/generate_adaptive_dataset.py \
@@ -174,55 +176,55 @@ python tools/generate_adaptive_dataset.py \
   --limit 10
 ```
 
-### Опции
+### Options
 
-| Флаг | По умолчанию | Описание |
+| Flag | Default | Description |
 |------|-------------|----------|
-| `--input` | `data/tasks_set.jsonl` | Входной JSONL |
-| `--output` | `data/tasks_set_adaptive_full.jsonl` | Выходной JSONL |
-| `--base_url` | `env: ADAPTIVE_LLM_BASE_URL` | Base URL OpenAI-compatible API |
-| `--model` | `env: ADAPTIVE_LLM_MODEL` или `qwen3-32b` | Имя модели |
-| `--api_key_env` | `ADAPTIVE_LLM_API_KEY` | Имя env-переменной с ключом |
-| `--limit` | `None` | Обработать только первые N записей |
-| `--dry_run` | `false` | Показать первые 2 prompt-а без API вызовов |
+| `--input` | `data/tasks_set.jsonl` | Input JSONL |
+| `--output` | `data/tasks_set_adaptive_full.jsonl` | Output JSONL |
+| `--base_url` | `env: ADAPTIVE_LLM_BASE_URL` | Base URL of the OpenAI-compatible API |
+| `--model` | `env: ADAPTIVE_LLM_MODEL` or `qwen3-32b` | Model name |
+| `--api_key_env` | `ADAPTIVE_LLM_API_KEY` | Name of the env variable holding the key |
+| `--limit` | `None` | Process only the first N records |
+| `--dry_run` | `false` | Show the first 2 prompts without making API calls |
 
 ---
 
 ## split_adaptive_dataset.py
 
-Стратифицированное разбиение `data/tasks_set_adaptive_full.jsonl` на train / val / test.
+Performs a stratified split of `data/tasks_set_adaptive_full.jsonl` into train / val / test.
 
-### Запуск
+### Run
 
 ```bash
 python tools/split_adaptive_dataset.py
 ```
 
-### Что делает
+### What It Does
 
-- читает adaptive JSONL;
-- стратифицирует по `|R| = len(required_agents)`;
-- пишет `data/splits_adaptive/{train,val,test}.jsonl`;
-- печатает распределение размеров наборов по сплитам.
+- reads the adaptive JSONL
+- stratifies by `|R| = len(required_agents)`
+- writes `data/splits_adaptive/{train,val,test}.jsonl`
+- prints the set-size distribution across the splits
 
 ---
 
 ## baseline_snapshot.py
 
-Официальный протокол сравнения baseline-ов в одном запуске.
+Official protocol for comparing baselines in a single run.
 
-### Запуск
+### Run
 
 ```bash
 python tools/baseline_snapshot.py --config configs/baseline_protocol.json
 ```
 
-### Что делает
+### What It Does
 
-- читает `configs/baseline_protocol.json`;
-- запускает baseline-скрипты в порядке `order`;
-- передаёт единые `seed`, `max_steps`, `reward`, `split_path`;
-- пропускает LLM baseline, если `include=false` или не задан `api_key_env`;
-- собирает результаты в:
+- reads `configs/baseline_protocol.json`
+- launches baseline scripts in the order defined by `order`
+- passes shared `seed`, `max_steps`, `reward`, and `split_path`
+- skips the LLM baseline if `include=false` or `api_key_env` is not set
+- collects results into:
   - `artifacts/baselines_summary.json`
   - `artifacts/baselines_summary.md`
